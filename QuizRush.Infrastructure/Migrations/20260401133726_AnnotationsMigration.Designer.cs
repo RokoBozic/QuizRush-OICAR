@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using QuizRush.Infrastructure;
 
@@ -10,9 +11,11 @@ using QuizRush.Infrastructure;
 namespace QuizRush.Infrastructure.Migrations
 {
     [DbContext(typeof(QuizRushDbContext))]
-    partial class QuizRushDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260401133726_AnnotationsMigration")]
+    partial class AnnotationsMigration
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
