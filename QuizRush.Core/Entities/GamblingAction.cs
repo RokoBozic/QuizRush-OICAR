@@ -14,6 +14,9 @@ namespace QuizRush.Core.Entities
         [Required]
         public long GameSessionId { get; set; }
 
+        [Required]
+        public long QuestionId { get; set; }
+
         public int PointsGambled { get; set; }
         public bool Won { get; set; }
 
