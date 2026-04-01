@@ -1,0 +1,6 @@
+@QuizRush.Api_HostAddress = http://localhost:5176
+
+GET {{QuizRush.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

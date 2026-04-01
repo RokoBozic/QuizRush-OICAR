@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="QuizRush.Api/QuizRush.Api.csproj" />
+  <Project Path="QuizRush.Core/QuizRush.Core.csproj" />
+  <Project Path="QuizRush.Infrastructure/QuizRush.Infrastructure.csproj" />
+</Solution>
