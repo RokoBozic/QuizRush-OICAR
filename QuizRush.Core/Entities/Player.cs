@@ -20,5 +20,7 @@ namespace QuizRush.Core.Entities
 
         public GameSession GameSession { get; set; } = null!;
         public User? User { get; set; }
+
+        public ICollection<GamblingAction> GamblingActions { get; set; } = new List<GamblingAction>();
     }
 }

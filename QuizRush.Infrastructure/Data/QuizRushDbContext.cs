@@ -1,84 +1,117 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using QuizRush.Core.Entities;
 
-namespace QuizRush.Infrastructure
+namespace QuizRush.Infrastructure;
+
+public class QuizRushDbContext : DbContext
 {
-    public class QuizRushDbContext : DbContext
+    public QuizRushDbContext(DbContextOptions<QuizRushDbContext> options) : base(options) { }
+
+    public DbSet<User> Users { get; set; }
+    public DbSet<Quiz> Quizzes { get; set; }
+    public DbSet<Question> Questions { get; set; }
+    public DbSet<Answer> Answers { get; set; }
+    public DbSet<GameSession> GameSessions { get; set; }
+    public DbSet<Player> Players { get; set; }
+    public DbSet<PlayerAnswer> PlayerAnswers { get; set; }
+    public DbSet<GamblingAction> GamblingActions { get; set; }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        public QuizRushDbContext(DbContextOptions<QuizRushDbContext> options) : base(options) { }
+        base.OnModelCreating(modelBuilder);
 
-        public DbSet<User> Users { get; set; }
-        public DbSet<Quiz> Quizzes { get; set; }
-        public DbSet<Question> Questions { get; set; }
-        public DbSet<Answer> Answers { get; set; }
-        public DbSet<GameSession> GameSessions { get; set; }
-        public DbSet<Player> Players { get; set; }
-        public DbSet<PlayerAnswer> PlayerAnswers { get; set; }
-        public DbSet<GamblingAction> GamblingActions { get; set; }
+        // Unique email
+        modelBuilder.Entity<User>()
+            .HasIndex(u => u.Email)
+            .IsUnique();
 
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
-        {
-            base.OnModelCreating(modelBuilder);
+        // Unique username
+        modelBuilder.Entity<User>()
+            .HasIndex(u => u.Username)
+            .IsUnique();
 
-            // Unique Email
-            modelBuilder.Entity<User>()
-                .HasIndex(u => u.Email)
-                .IsUnique();
+        // User creates quizzes
+        modelBuilder.Entity<Quiz>()
+            .HasOne(q => q.Creator)
+            .WithMany(u => u.Quizzes)
+            .HasForeignKey(q => q.CreatorId)
+            .OnDelete(DeleteBehavior.Cascade);
 
-            // Unique Username
-            modelBuilder.Entity<User>()
-                .HasIndex(u => u.Username)
-                .IsUnique();
+        // Quiz has questions
+        modelBuilder.Entity<Question>()
+            .HasOne(q => q.Quiz)
+            .WithMany(q => q.Questions)
+            .HasForeignKey(q => q.QuizId)
+            .OnDelete(DeleteBehavior.Cascade);
 
-            // One-to-Many for Quiz Creator
-            modelBuilder.Entity<Quiz>()
-                .HasOne(q => q.Creator)
-                .WithMany(u => u.Quizzes)
-                .HasForeignKey(q => q.CreatorId);
+        // Question has answers
+        modelBuilder.Entity<Answer>()
+            .HasOne(a => a.Question)
+            .WithMany(q => q.Answers)
+            .HasForeignKey(a => a.QuestionId)
+            .OnDelete(DeleteBehavior.Cascade);
 
-            // GameSession
-            modelBuilder.Entity<GameSession>()
-                .HasOne(gs => gs.Quiz)
-                .WithMany()
-                .HasForeignKey(gs => gs.QuizId);
+        // GameSession belongs to quiz
+        modelBuilder.Entity<GameSession>()
+            .HasOne(gs => gs.Quiz)
+            .WithMany()
+            .HasForeignKey(gs => gs.QuizId)
+            .OnDelete(DeleteBehavior.Restrict);
 
-            modelBuilder.Entity<GameSession>()
-                .HasOne(gs => gs.HostUser)
-                .WithMany()
-                .HasForeignKey(gs => gs.HostUserId);
+        // GameSession host (user)
+        modelBuilder.Entity<GameSession>()
+            .HasOne(gs => gs.HostUser)
+            .WithMany()
+            .HasForeignKey(gs => gs.HostUserId)
+            .OnDelete(DeleteBehavior.Restrict);
 
-            // Player
-            modelBuilder.Entity<Player>()
-                .HasOne(p => p.GameSession)
-                .WithMany(gs => gs.Players)
-                .HasForeignKey(p => p.GameSessionId);
+        // Player belongs to session
+        modelBuilder.Entity<Player>()
+            .HasOne(p => p.GameSession)
+            .WithMany(gs => gs.Players)
+            .HasForeignKey(p => p.GameSessionId)
+            .OnDelete(DeleteBehavior.Cascade);
 
-            // PlayerAnswer
-            modelBuilder.Entity<PlayerAnswer>()
-                .HasOne(pa => pa.GameSession)
-                .WithMany(gs => gs.PlayerAnswers)
-                .HasForeignKey(pa => pa.GameSessionId);
+        // PlayerAnswer belongs to session
+        modelBuilder.Entity<PlayerAnswer>()
+            .HasOne(pa => pa.GameSession)
+            .WithMany(gs => gs.PlayerAnswers)
+            .HasForeignKey(pa => pa.GameSessionId)
+            .OnDelete(DeleteBehavior.Cascade);
 
-            modelBuilder.Entity<PlayerAnswer>()
-                .HasOne(pa => pa.Player)
-                .WithMany()
-                .HasForeignKey(pa => pa.PlayerId);
+        // PlayerAnswer belongs to player
+        modelBuilder.Entity<PlayerAnswer>()
+            .HasOne(pa => pa.Player)
+            .WithMany()
+            .HasForeignKey(pa => pa.PlayerId)
+            .OnDelete(DeleteBehavior.Restrict);
 
-            // GamblingAction
-            modelBuilder.Entity<GamblingAction>()
-                .HasOne(ga => ga.Player)
-                .WithMany()
-                .HasForeignKey(ga => ga.PlayerId);
+        // PlayerAnswer belongs to question
+        modelBuilder.Entity<PlayerAnswer>()
+            .HasOne(pa => pa.Question)
+            .WithMany()
+            .HasForeignKey(pa => pa.QuestionId)
+            .OnDelete(DeleteBehavior.Restrict);
 
-            modelBuilder.Entity<GamblingAction>()
-                .HasOne(ga => ga.GameSession)
-                .WithMany()
-                .HasForeignKey(ga => ga.GameSessionId);
+        // GamblingAction belongs to player
+        modelBuilder.Entity<GamblingAction>()
+            .HasOne(ga => ga.Player)
+            .WithMany(p => p.GamblingActions)
+            .HasForeignKey(ga => ga.PlayerId)
+            .OnDelete(DeleteBehavior.Restrict);
 
-            modelBuilder.Entity<GamblingAction>()
-                .HasOne(ga => ga.Question)
-                .WithMany()
-                .HasForeignKey(ga => ga.QuestionId);
-        }
+        // GamblingAction belongs to session
+        modelBuilder.Entity<GamblingAction>()
+            .HasOne(ga => ga.GameSession)
+            .WithMany(gs => gs.GamblingActions)
+            .HasForeignKey(ga => ga.GameSessionId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // GamblingAction belongs to question
+        modelBuilder.Entity<GamblingAction>()
+            .HasOne(ga => ga.Question)
+            .WithMany()
+            .HasForeignKey(ga => ga.QuestionId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

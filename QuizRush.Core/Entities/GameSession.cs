@@ -26,6 +26,7 @@ namespace QuizRush.Core.Entities
         public User HostUser { get; set; } = null!;
         public ICollection<Player> Players { get; set; } = new List<Player>();
         public ICollection<PlayerAnswer> PlayerAnswers { get; set; } = new List<PlayerAnswer>();
+        public ICollection<GamblingAction> GamblingActions { get; set; } = new List<GamblingAction>();
     }
 
     public enum GameStatus
