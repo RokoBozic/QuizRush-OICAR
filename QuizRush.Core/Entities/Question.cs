@@ -1,19 +1,23 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.ComponentModel.DataAnnotations;
 
 namespace QuizRush.Core.Entities;
 
 public class Question
 {
+    [Key]
     public long Id { get; set; }
+
+    [Required]
+    [MaxLength(500)]
     public string Text { get; set; } = string.Empty;
+
+    [Required]
     public long QuizId { get; set; }
-    
-    // Requirement: Points and Time limits for gameplay
+
+
     public int PointsValue { get; set; }
+
+
     public int TimeLimitSeconds { get; set; }
 
     public Quiz Quiz { get; set; } = null!;
