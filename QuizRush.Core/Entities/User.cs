@@ -24,4 +24,6 @@ public class User
     public int AccumulatedPoints { get; set; } = 0;
 
     public ICollection<Quiz> Quizzes { get; set; } = new List<Quiz>();
+    public string PasswordSalt { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }

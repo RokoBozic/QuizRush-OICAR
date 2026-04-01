@@ -16,4 +16,6 @@ public class Quiz
 
     public User Creator { get; set; } = null!;
     public ICollection<Question> Questions { get; set; } = new List<Question>();
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public string Description { get; set; } = string.Empty;
 }

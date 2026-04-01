@@ -14,10 +14,7 @@ public class Question
     [Required]
     public long QuizId { get; set; }
 
-
     public int PointsValue { get; set; }
-
-
     public int TimeLimitSeconds { get; set; }
 
     public Quiz Quiz { get; set; } = null!;
