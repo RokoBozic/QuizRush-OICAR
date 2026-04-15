@@ -24,8 +24,10 @@ public class AuthController : ControllerBase
     /// <summary>Registers a new user account.</summary>
     /// <response code="200">Registration successful.</response>
     /// <response code="400">Email or username already in use.</response>
+    [ProducesResponseType(typeof(string), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
     [HttpPost("register")]
-    public async Task<IActionResult> Register(RegisterViewModel model)
+    public async Task<ActionResult<string>> Register(RegisterViewModel model)
     {
         if (await _context.Users.AnyAsync(u => u.Email == model.Email))
             return BadRequest("Email already in use.");
@@ -53,8 +55,10 @@ public class AuthController : ControllerBase
     /// <summary>Logs in with email and password, returns a JWT token.</summary>
     /// <response code="200">Login successful, JWT token returned.</response>
     /// <response code="401">Invalid credentials.</response>
+    [ProducesResponseType(typeof(AuthResponseViewModel), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(string), StatusCodes.Status401Unauthorized)]
     [HttpPost("login")]
-    public async Task<IActionResult> Login(LoginViewModel model)
+    public async Task<ActionResult<AuthResponseViewModel>> Login(LoginViewModel model)
     {
         var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == model.Email);
 

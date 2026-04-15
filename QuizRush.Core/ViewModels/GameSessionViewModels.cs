@@ -1,9 +1,11 @@
 using QuizRush.Core.Entities;
+using System.ComponentModel.DataAnnotations;
 
 namespace QuizRush.Core.ViewModels
 {
     public class CreateSessionViewModel
     {
+        [Range(1, long.MaxValue, ErrorMessage = "QuizId must be a positive number.")]
         public long QuizId { get; set; }
     }
 

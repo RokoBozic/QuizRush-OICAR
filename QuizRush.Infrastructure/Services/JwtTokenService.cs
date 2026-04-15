@@ -17,10 +17,13 @@ namespace QuizRush.Infrastructure.Services
 
         public JwtTokenService(IConfiguration configuration)
         {
-            _key = configuration["Jwt:Key"]!;
+            _key = configuration["Jwt:Key"] ?? string.Empty;
             _issuer = configuration["Jwt:Issuer"]!;
             _audience = configuration["Jwt:Audience"]!;
             _durationInMinutes = double.Parse(configuration["Jwt:DurationInMinutes"]!);
+
+            if (string.IsNullOrWhiteSpace(_key))
+                throw new InvalidOperationException("JWT signing key is missing. Set Jwt__Key environment variable or Jwt:Key configuration value.");
         }
 
         public string GenerateToken(User user)

@@ -6,12 +6,18 @@ using QuizRush.Infrastructure;
 using QuizRush.Infrastructure.Repositories;
 using QuizRush.Infrastructure.Services;
 using System.Text;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
+const string DevelopmentJwtFallbackKey = "QuizRush-Dev-Only-Key-Replace-In-Production-2026";
 
 // Add services to the container.
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.IgnoreCycles;
+    });
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -55,14 +61,28 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddDbContext<QuizRushDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("Default")));
 
+string jwtKey = builder.Configuration["Jwt:Key"] ?? string.Empty;
+if (string.IsNullOrWhiteSpace(jwtKey))
+{
+    if (builder.Environment.IsDevelopment())
+    {
+        jwtKey = DevelopmentJwtFallbackKey;
+        builder.Configuration["Jwt:Key"] = jwtKey;
+        Console.WriteLine("JWT signing key missing in configuration. Using development fallback key.");
+    }
+    else
+    {
+        throw new InvalidOperationException("JWT signing key is missing. Set Jwt__Key environment variable or Jwt:Key configuration value.");
+    }
+}
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8
-                .GetBytes(builder.Configuration["Jwt:Key"]!)),
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
             ValidateIssuer = true,
             ValidIssuer = builder.Configuration["Jwt:Issuer"],
             ValidateAudience = true,

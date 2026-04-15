@@ -21,10 +21,14 @@ namespace QuizRush.Api.Controllers
         /// <summary>Returns the profile of the currently authenticated user.</summary>
         /// <response code="200">Profile returned.</response>
         /// <response code="401">Not authenticated.</response>
+        [ProducesResponseType(typeof(UserProfileViewModel), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpGet("profile")]
-        public async Task<IActionResult> GetProfile()
+        public async Task<ActionResult<UserProfileViewModel>> GetProfile()
         {
-            long userId = GetUserId();
+            if (!TryGetUserId(out long userId))
+                return Unauthorized();
 
             var profile = await _userService.GetProfileAsync(userId);
             if (profile == null)
@@ -37,10 +41,15 @@ namespace QuizRush.Api.Controllers
         /// <response code="204">Profile updated successfully.</response>
         /// <response code="400">Username or email already taken.</response>
         /// <response code="401">Not authenticated.</response>
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpPut("profile")]
         public async Task<IActionResult> UpdateProfile(UpdateProfileViewModel model)
         {
-            long userId = GetUserId();
+            if (!TryGetUserId(out long userId))
+                return Unauthorized();
 
             try
             {
@@ -61,10 +70,15 @@ namespace QuizRush.Api.Controllers
         /// <response code="204">Password changed successfully.</response>
         /// <response code="400">Current password is incorrect.</response>
         /// <response code="401">Not authenticated.</response>
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpPut("change-password")]
         public async Task<IActionResult> ChangePassword(ChangePasswordViewModel model)
         {
-            long userId = GetUserId();
+            if (!TryGetUserId(out long userId))
+                return Unauthorized();
 
             try
             {
@@ -81,9 +95,11 @@ namespace QuizRush.Api.Controllers
             }
         }
 
-        private long GetUserId()
+        private bool TryGetUserId(out long userId)
         {
-            return long.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+            userId = 0;
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            return long.TryParse(userIdClaim, out userId);
         }
     }
 }

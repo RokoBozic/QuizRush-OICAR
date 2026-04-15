@@ -21,11 +21,15 @@ namespace QuizRush.Api.Controllers
         /// <response code="201">Session created, PIN code returned.</response>
         /// <response code="404">Quiz not found.</response>
         /// <response code="401">Not authenticated.</response>
+        [ProducesResponseType(typeof(GameSessionViewModel), StatusCodes.Status201Created)]
+        [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
         [Authorize]
         [HttpPost]
-        public async Task<IActionResult> CreateSession(CreateSessionViewModel model)
+        public async Task<ActionResult<GameSessionViewModel>> CreateSession(CreateSessionViewModel model)
         {
-            long hostUserId = long.Parse(User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+            if (!TryGetUserId(out long hostUserId))
+                return Unauthorized();
 
             try
             {
@@ -41,8 +45,10 @@ namespace QuizRush.Api.Controllers
         /// <summary>Returns a game session by its PIN code.</summary>
         /// <response code="200">Session found and returned.</response>
         /// <response code="404">Session not found.</response>
+        [ProducesResponseType(typeof(GameSessionViewModel), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpGet("{code}")]
-        public async Task<IActionResult> GetSessionByCode(string code)
+        public async Task<ActionResult<GameSessionViewModel>> GetSessionByCode(string code)
         {
             var session = await _gameSessionService.GetSessionByCodeAsync(code);
             if (session == null)
@@ -54,8 +60,10 @@ namespace QuizRush.Api.Controllers
         /// <summary>Returns the final leaderboard/results for a completed game session.</summary>
         /// <response code="200">Results returned, ranked by score.</response>
         /// <response code="404">Session not found.</response>
+        [ProducesResponseType(typeof(IEnumerable<PlayerResultViewModel>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpGet("{id:long}/results")]
-        public async Task<IActionResult> GetResults(long id)
+        public async Task<ActionResult<IEnumerable<PlayerResultViewModel>>> GetResults(long id)
         {
             try
             {
@@ -66,6 +74,13 @@ namespace QuizRush.Api.Controllers
             {
                 return NotFound();
             }
+        }
+
+        private bool TryGetUserId(out long userId)
+        {
+            userId = 0;
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            return long.TryParse(userIdClaim, out userId);
         }
     }
 }
