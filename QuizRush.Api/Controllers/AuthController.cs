@@ -21,6 +21,9 @@ public class AuthController : ControllerBase
         _jwtTokenService = jwtTokenService;
     }
 
+    /// <summary>Registers a new user account.</summary>
+    /// <response code="200">Registration successful.</response>
+    /// <response code="400">Email or username already in use.</response>
     [HttpPost("register")]
     public async Task<IActionResult> Register(RegisterViewModel model)
     {
@@ -47,6 +50,9 @@ public class AuthController : ControllerBase
         return Ok("Registration successful.");
     }
 
+    /// <summary>Logs in with email and password, returns a JWT token.</summary>
+    /// <response code="200">Login successful, JWT token returned.</response>
+    /// <response code="401">Invalid credentials.</response>
     [HttpPost("login")]
     public async Task<IActionResult> Login(LoginViewModel model)
     {
