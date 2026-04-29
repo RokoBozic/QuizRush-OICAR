@@ -1,0 +1,18 @@
+<div class="mb-2">
+    <div class="d-flex justify-content-between">
+        <small>Time left</small>
+        <small>@SecondsRemaining s</small>
+    </div>
+    <div class="progress" role="progressbar">
+        <div class="progress-bar bg-info" style="width:@ProgressPercent%"></div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public int SecondsRemaining { get; set; }
+    [Parameter] public int TotalSeconds { get; set; } = 1;
+
+    private int ProgressPercent => TotalSeconds <= 0
+        ? 0
+        : Math.Clamp((int)(SecondsRemaining * 100.0 / TotalSeconds), 0, 100);
+}

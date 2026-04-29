@@ -1,0 +1,30 @@
+@using QuizRush.Core.ViewModels
+
+<div class="card mb-3">
+    <div class="card-body">
+        <h5 class="card-title">Select Quiz</h5>
+        <select class="form-select" @onchange="OnChange">
+            <option value="">Choose a quiz...</option>
+            @foreach (var quiz in Quizzes)
+            {
+                <option value="@quiz.Id">@quiz.Title</option>
+            }
+        </select>
+    </div>
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<QuizResponseViewModel> Quizzes { get; set; } = Array.Empty<QuizResponseViewModel>();
+    [Parameter] public EventCallback<long?> SelectedQuizChanged { get; set; }
+
+    private async Task OnChange(ChangeEventArgs args)
+    {
+        if (long.TryParse(args.Value?.ToString(), out long quizId))
+        {
+            await SelectedQuizChanged.InvokeAsync(quizId);
+            return;
+        }
+
+        await SelectedQuizChanged.InvokeAsync(null);
+    }
+}

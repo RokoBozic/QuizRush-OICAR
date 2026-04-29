@@ -1,0 +1,13 @@
+@using QuizRush.Core.ViewModels
+
+<div class="card mb-3">
+    <div class="card-body">
+        <h5 class="card-title">Live Leaderboard</h5>
+        <Leaderboard Items="Items" CurrentPlayerName="@CurrentPlayerName" />
+    </div>
+</div>
+
+@code {
+    [Parameter] public LeaderboardData[] Items { get; set; } = Array.Empty<LeaderboardData>();
+    [Parameter] public string CurrentPlayerName { get; set; } = string.Empty;
+}

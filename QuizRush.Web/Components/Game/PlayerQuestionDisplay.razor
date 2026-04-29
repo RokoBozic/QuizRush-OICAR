@@ -1,0 +1,31 @@
+@using QuizRush.Core.ViewModels
+
+@if (Question == null)
+{
+    <p class="text-muted">Question not available.</p>
+}
+else
+{
+    <div class="card mb-3">
+        <div class="card-body">
+            <h5 class="card-title">@Question.Text</h5>
+            <QuestionTimer SecondsRemaining="@SecondsRemaining" TotalSeconds="@Question.TimeLimit" />
+            <div class="d-grid gap-2">
+                @foreach (var answer in Question.Answers)
+                {
+                    <button class="btn btn-outline-primary" @onclick="() => Submit(answer.AnswerId)">
+                        @answer.Text
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public QuestionData? Question { get; set; }
+    [Parameter] public int SecondsRemaining { get; set; }
+    [Parameter] public EventCallback<long> OnAnswerSubmit { get; set; }
+
+    private Task Submit(long answerId) => OnAnswerSubmit.InvokeAsync(answerId);
+}

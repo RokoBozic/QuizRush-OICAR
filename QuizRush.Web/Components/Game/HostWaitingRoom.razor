@@ -1,0 +1,20 @@
+<div class="card mb-3">
+    <div class="card-body">
+        <h5 class="card-title">Waiting Room</h5>
+        <p class="mb-1">Session PIN: <strong>@SessionCode</strong></p>
+        <p class="mb-2">Players joined: <strong>@PlayerCount</strong></p>
+
+        <ul class="list-group">
+            @foreach (var player in Players)
+            {
+                <li class="list-group-item">@player</li>
+            }
+        </ul>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string SessionCode { get; set; } = string.Empty;
+    [Parameter] public int PlayerCount { get; set; }
+    [Parameter] public IReadOnlyList<string> Players { get; set; } = Array.Empty<string>();
+}

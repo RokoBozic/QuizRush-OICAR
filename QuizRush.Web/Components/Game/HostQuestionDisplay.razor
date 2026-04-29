@@ -1,0 +1,24 @@
+@using QuizRush.Core.ViewModels
+
+<div class="card mb-3">
+    <div class="card-body">
+        <h5 class="card-title">Current Question</h5>
+        @if (Question == null)
+        {
+            <p class="text-muted mb-0">No active question yet.</p>
+        }
+        else
+        {
+            <p class="mb-2"><strong>@Question.Text</strong></p>
+            <QuestionTimer SecondsRemaining="@SecondsRemaining" TotalSeconds="@Question.TimeLimit" />
+            <p class="mb-0">Answers received: @AnsweredCount / @TotalPlayers</p>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public QuestionData? Question { get; set; }
+    [Parameter] public int AnsweredCount { get; set; }
+    [Parameter] public int TotalPlayers { get; set; }
+    [Parameter] public int SecondsRemaining { get; set; }
+}

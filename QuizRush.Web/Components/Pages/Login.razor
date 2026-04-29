@@ -1,0 +1,48 @@
+@page "/login"
+@rendermode InteractiveServer
+@using QuizRush.Web.Services
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>Login</PageTitle>
+
+<h1>Login</h1>
+
+<div class="card col-md-6">
+    <div class="card-body">
+        <div class="mb-3">
+            <label class="form-label">Email</label>
+            <input class="form-control" @bind="Email" />
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Password</label>
+            <input type="password" class="form-control" @bind="Password" />
+        </div>
+        <button class="btn btn-primary" @onclick="HandleLogin">Login</button>
+        <a class="btn btn-link" href="/register">Create account</a>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(Message))
+{
+    <div class="alert alert-info mt-3">@Message</div>
+}
+
+@code {
+    private string Email { get; set; } = string.Empty;
+    private string Password { get; set; } = string.Empty;
+    private string Message { get; set; } = string.Empty;
+
+    private async Task HandleLogin()
+    {
+        var response = await AuthService.LoginAsync(Email, Password);
+        if (response == null)
+        {
+            Message = "Login failed. Check credentials.";
+            return;
+        }
+
+        Message = "Login successful.";
+        Navigation.NavigateTo("/host");
+    }
+}

@@ -1,0 +1,11 @@
+@if (!string.IsNullOrWhiteSpace(Message))
+{
+    <div class="alert @(IsPositive ? "alert-success" : "alert-danger") py-2 my-2">
+        @Message
+    </div>
+}
+
+@code {
+    [Parameter] public string? Message { get; set; }
+    [Parameter] public bool IsPositive { get; set; } = true;
+}

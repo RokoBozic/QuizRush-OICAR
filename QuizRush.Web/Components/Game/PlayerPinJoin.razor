@@ -1,0 +1,32 @@
+<div class="card mb-3">
+    <div class="card-body">
+        <h5 class="card-title">Join Game</h5>
+        <div class="row g-2">
+            <div class="col-md-4">
+                <input class="form-control" placeholder="PIN code" value="@SessionCode" @oninput="OnCodeInput" />
+            </div>
+            <div class="col-md-5">
+                <input class="form-control" placeholder="Player name" value="@PlayerName" @oninput="OnNameInput" />
+            </div>
+            <div class="col-md-3 d-grid">
+                <button class="btn btn-primary" @onclick="JoinClicked">Join</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string SessionCode { get; set; } = string.Empty;
+    [Parameter] public string PlayerName { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string> SessionCodeChanged { get; set; }
+    [Parameter] public EventCallback<string> PlayerNameChanged { get; set; }
+    [Parameter] public EventCallback OnJoin { get; set; }
+
+    private Task OnCodeInput(ChangeEventArgs args) =>
+        SessionCodeChanged.InvokeAsync(args.Value?.ToString() ?? string.Empty);
+
+    private Task OnNameInput(ChangeEventArgs args) =>
+        PlayerNameChanged.InvokeAsync(args.Value?.ToString() ?? string.Empty);
+
+    private Task JoinClicked() => OnJoin.InvokeAsync();
+}

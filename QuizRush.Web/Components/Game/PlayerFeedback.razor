@@ -1,0 +1,10 @@
+@using QuizRush.Core.ViewModels
+
+@if (Answer != null)
+{
+    <PointsPopup Message="@(Answer.IsCorrect ? "Correct answer!" : "Wrong answer!")" IsPositive="@Answer.IsCorrect" />
+}
+
+@code {
+    [Parameter] public AnswerData? Answer { get; set; }
+}

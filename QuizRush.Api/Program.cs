@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using QuizRush.Core.Services;
+using QuizRush.Api.Hubs;
 using QuizRush.Infrastructure;
 using QuizRush.Infrastructure.Repositories;
 using QuizRush.Infrastructure.Services;
@@ -57,6 +58,22 @@ builder.Services.AddSwaggerGen(options =>
         }
     });
 });
+builder.Services.AddSignalR();
+
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowBlazor", policy =>
+    {
+        policy.WithOrigins(
+                "http://localhost:5261",
+                "https://localhost:7291",
+                "http://localhost:5177",
+                "http://localhost:5178")
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .AllowCredentials();
+    });
+});
 
 builder.Services.AddDbContext<QuizRushDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("Default")));
@@ -96,6 +113,7 @@ builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IQuizService, QuizService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IGameSessionService, GameSessionService>();
+builder.Services.AddScoped<ScoreCalculationService>();
 
 var app = builder.Build();
 
@@ -106,9 +124,12 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseCors("AllowBlazor");
+
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<GameHub>("/hub/game");
 
 app.Run();
