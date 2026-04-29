@@ -25,23 +25,47 @@ namespace QuizRush.Tests
         }
 
         [Fact]
-        public void ApplyGambling_CorrectAnswer_AddsGambleBonus()
+        public void ApplyGambling_CorrectAnswer_AddsStakeFromPlayerScore()
         {
             var service = new ScoreCalculationService();
 
-            int result = service.ApplyGambling(basePoints: 80, gamblingPercentage: 50, isCorrect: true);
+            // 100 total score, 50% stake = 50; earned 80 → 80 + 50 = 130 delta
+            int result = service.ApplyGambling(earnedQuestionPoints: 80, playerScoreBeforeAnswer: 100, gamblingPercentage: 50, isCorrect: true);
 
-            Assert.Equal(120, result);
+            Assert.Equal(130, result);
         }
 
         [Fact]
-        public void ApplyGambling_WrongAnswer_SubtractsGambleAmount()
+        public void ApplyGambling_WrongAnswer_LosesStakeFromPlayerScore()
         {
             var service = new ScoreCalculationService();
 
-            int result = service.ApplyGambling(basePoints: 80, gamblingPercentage: 25, isCorrect: false);
+            // 100 score, 50% stake = 50 lost (earned points are 0 when wrong)
+            int result = service.ApplyGambling(earnedQuestionPoints: 0, playerScoreBeforeAnswer: 100, gamblingPercentage: 50, isCorrect: false);
 
-            Assert.Equal(60, result);
+            Assert.Equal(-50, result);
+        }
+
+        [Fact]
+        public void ApplyGambling_100Points50PercentWin_NoQuestionPoints_Reaches150PercentOfStartingScore()
+        {
+            var service = new ScoreCalculationService();
+
+            int delta = service.ApplyGambling(earnedQuestionPoints: 0, playerScoreBeforeAnswer: 100, gamblingPercentage: 50, isCorrect: true);
+
+            Assert.Equal(50, delta);
+            Assert.Equal(150, 100 + delta);
+        }
+
+        [Fact]
+        public void ApplyGambling_100Points50PercentWrong_LeavesHalfOfStartingScore()
+        {
+            var service = new ScoreCalculationService();
+
+            int delta = service.ApplyGambling(earnedQuestionPoints: 0, playerScoreBeforeAnswer: 100, gamblingPercentage: 50, isCorrect: false);
+
+            Assert.Equal(-50, delta);
+            Assert.Equal(50, 100 + delta);
         }
 
         [Fact]
@@ -59,7 +83,7 @@ namespace QuizRush.Tests
         {
             var service = new ScoreCalculationService();
 
-            int result = service.ApplyGambling(basePoints: 150, gamblingPercentage: 0, isCorrect: true);
+            int result = service.ApplyGambling(earnedQuestionPoints: 150, playerScoreBeforeAnswer: 999, gamblingPercentage: 0, isCorrect: true);
 
             Assert.Equal(150, result);
         }

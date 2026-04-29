@@ -1,0 +1,208 @@
+@page "/play/{SessionCode}"
+@rendermode InteractiveServer
+@using System.Timers
+@using QuizRush.Core.ViewModels
+@using QuizRush.Web.Services
+@inject GameService GameService
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<PageTitle>Play</PageTitle>
+
+@if (string.IsNullOrWhiteSpace(PlayerName))
+{
+    <div class="alert alert-warning">Missing player name. Join from the Join Game page.</div>
+    <a class="btn btn-primary" href="/join">Join Game</a>
+}
+else
+{
+    <h1>Playing — @SessionCode</h1>
+    <p class="text-muted">Playing as <strong>@PlayerName</strong></p>
+
+    @if (CurrentQuestion == null && !ShowGamblingPhase)
+    {
+        <PlayerWaitingRoom />
+    }
+
+    @if (ShowGamblingPhase)
+    {
+        <div class="alert alert-warning mb-3">Gambling phase — choose how much to gamble on this question.</div>
+        <PlayerGamblingWidget OnSelect="PlaceGamble" />
+    }
+
+    @if (CurrentQuestion != null)
+    {
+        <PlayerQuestionDisplay Question="CurrentQuestion" SecondsRemaining="@CurrentTimer" OnAnswerSubmit="SubmitAnswer" />
+        <PlayerFeedback Answer="LastAnswer" />
+        <PlayerLeaderboard Items="Leaderboard" CurrentPlayerName="@PlayerName" />
+    }
+
+    @if (!string.IsNullOrWhiteSpace(StatusMessage))
+    {
+        <div class="alert alert-info">@StatusMessage</div>
+    }
+}
+
+@code {
+    [Parameter] public string SessionCode { get; set; } = string.Empty;
+
+    [SupplyParameterFromQuery(Name = "name")]
+    public string? PlayerName { get; set; }
+
+    private int CurrentTimer { get; set; }
+    private string StatusMessage { get; set; } = string.Empty;
+    private QuestionData? CurrentQuestion { get; set; }
+    private LeaderboardData[] Leaderboard { get; set; } = Array.Empty<LeaderboardData>();
+    private AnswerData? LastAnswer { get; set; }
+    private System.Timers.Timer? _countdownTimer;
+    private bool ShowGamblingPhase { get; set; }
+    private bool _joinDispatched;
+
+    protected override void OnInitialized()
+    {
+        SessionCode = SessionCode.Trim().ToUpperInvariant();
+
+        GameService.OnQuestionReady += HandleQuestionReady;
+        GameService.OnAnswerRevealed += HandleAnswerRevealed;
+        GameService.OnScoresUpdated += HandleScoresUpdated;
+        GameService.OnGameEnded += HandleGameEnded;
+        GameService.OnGameError += HandleError;
+        GameService.OnGamblingPhaseStarted += HandleGamblingPhaseStarted;
+        GameService.OnHostPlayerNotice += HandleHostPlayerNotice;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _joinDispatched || string.IsNullOrWhiteSpace(PlayerName))
+        {
+            return;
+        }
+
+        _joinDispatched = true;
+
+        if (GameService.IsConnected)
+        {
+            return;
+        }
+
+        try
+        {
+            await GameService.JoinGame(SessionCode, PlayerName.Trim());
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Could not join session: {ex.Message}";
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleGamblingPhaseStarted(int secondsRemaining)
+    {
+        ShowGamblingPhase = true;
+        CurrentQuestion = null;
+        LastAnswer = null;
+        StopCountdown();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleHostPlayerNotice(string message)
+    {
+        StatusMessage = message;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task SubmitAnswer(long answerId)
+    {
+        await GameService.SubmitAnswer(SessionCode, answerId);
+        StatusMessage = "Answer submitted.";
+    }
+
+    private async Task PlaceGamble(int percentage)
+    {
+        await GameService.PlaceGamble(SessionCode, percentage);
+        StatusMessage = $"Gamble set to {percentage}%.";
+    }
+
+    private void HandleQuestionReady(QuestionData question, int timeLimit)
+    {
+        ShowGamblingPhase = false;
+        CurrentQuestion = question;
+        CurrentTimer = timeLimit;
+        LastAnswer = null;
+        StartCountdown();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleAnswerRevealed(AnswerData answer)
+    {
+        LastAnswer = answer;
+        StopCountdown();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void StartCountdown()
+    {
+        StopCountdown();
+        _countdownTimer = new System.Timers.Timer(1000);
+        _countdownTimer.Elapsed += OnCountdownTick;
+        _countdownTimer.AutoReset = true;
+        _countdownTimer.Start();
+    }
+
+    private void StopCountdown()
+    {
+        if (_countdownTimer != null)
+        {
+            _countdownTimer.Stop();
+            _countdownTimer.Elapsed -= OnCountdownTick;
+            _countdownTimer.Dispose();
+            _countdownTimer = null;
+        }
+    }
+
+    private void OnCountdownTick(object? sender, ElapsedEventArgs e)
+    {
+        if (CurrentTimer > 0)
+        {
+            CurrentTimer--;
+            InvokeAsync(StateHasChanged);
+        }
+
+        if (CurrentTimer <= 0)
+        {
+            StopCountdown();
+        }
+    }
+
+    private void HandleScoresUpdated(LeaderboardData[] scores)
+    {
+        Leaderboard = scores;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleGameEnded(LeaderboardData[] finalScores)
+    {
+        Leaderboard = finalScores;
+        StatusMessage = "Game ended by host.";
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleError(string message)
+    {
+        StatusMessage = message;
+        InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        StopCountdown();
+        GameService.OnQuestionReady -= HandleQuestionReady;
+        GameService.OnAnswerRevealed -= HandleAnswerRevealed;
+        GameService.OnScoresUpdated -= HandleScoresUpdated;
+        GameService.OnGameEnded -= HandleGameEnded;
+        GameService.OnGameError -= HandleError;
+        GameService.OnGamblingPhaseStarted -= HandleGamblingPhaseStarted;
+        GameService.OnHostPlayerNotice -= HandleHostPlayerNotice;
+    }
+}

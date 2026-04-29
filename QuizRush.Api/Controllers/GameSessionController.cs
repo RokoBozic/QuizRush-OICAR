@@ -6,6 +6,10 @@ using System.Security.Claims;
 
 namespace QuizRush.Api.Controllers
 {
+    /// <summary>
+    /// REST entry point for creating and inspecting sessions. Live play (host/join, questions, gambling)
+    /// is driven by SignalR <c>GameHub</c> so clients do not need to call this controller during an active game.
+    /// </summary>
     [ApiController]
     [Route("api/[controller]")]
     public class GameSessionController : ControllerBase

@@ -1,6 +1,9 @@
 <div class="card mb-3">
     <div class="card-body">
         <h5 class="card-title">Gamble Points</h5>
+        <p class="card-text small text-muted mb-2">
+            Stake is a share of your current score. If you answer correctly you get that stake back as a bonus on top of question points (e.g. 50% at 100 pts → +50). If you are wrong you lose the stake (e.g. 50% at 100 pts → −50).
+        </p>
         <div class="btn-group" role="group">
             @foreach (var percent in Percentages)
             {

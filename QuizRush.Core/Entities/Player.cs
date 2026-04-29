@@ -13,7 +13,7 @@ namespace QuizRush.Core.Entities
         [MaxLength(50)]
         public string Name { get; set; } = string.Empty;
 
-        public int Score { get; set; } = 0;
+        public int Score { get; set; } = 100;
         public DateTime JoinedAt { get; set; } = DateTime.UtcNow;
 
         public long? UserId { get; set; }

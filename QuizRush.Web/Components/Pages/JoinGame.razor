@@ -1,8 +1,8 @@
 @page "/join"
-@using System.Timers
-@using QuizRush.Core.ViewModels
+@rendermode InteractiveServer
 @using QuizRush.Web.Services
 @inject GameService GameService
+@inject NavigationManager Navigation
 @implements IDisposable
 
 <PageTitle>Join Game</PageTitle>
@@ -14,19 +14,6 @@
                PlayerNameChanged="OnNameChanged"
                OnJoin="HandleJoinGame" />
 
-@if (IsJoined && CurrentQuestion == null)
-{
-    <PlayerWaitingRoom />
-}
-
-@if (CurrentQuestion != null)
-{
-    <PlayerQuestionDisplay Question="CurrentQuestion" SecondsRemaining="@CurrentTimer" OnAnswerSubmit="SubmitAnswer" />
-    <PlayerGamblingWidget OnSelect="PlaceGamble" />
-    <PlayerFeedback Answer="LastAnswer" />
-    <PlayerLeaderboard Items="Leaderboard" CurrentPlayerName="@PlayerName" />
-}
-
 @if (!string.IsNullOrWhiteSpace(StatusMessage))
 {
     <div class="alert alert-info">@StatusMessage</div>
@@ -35,21 +22,11 @@
 @code {
     private string SessionCode { get; set; } = string.Empty;
     private string PlayerName { get; set; } = string.Empty;
-    private bool IsJoined { get; set; }
-    private int CurrentTimer { get; set; }
     private string StatusMessage { get; set; } = string.Empty;
-    private QuestionData? CurrentQuestion { get; set; }
-    private LeaderboardData[] Leaderboard { get; set; } = Array.Empty<LeaderboardData>();
-    private AnswerData? LastAnswer { get; set; }
-    private System.Timers.Timer? _countdownTimer;
 
     protected override void OnInitialized()
     {
         GameService.OnGameJoined += HandleGameJoined;
-        GameService.OnQuestionReady += HandleQuestionReady;
-        GameService.OnAnswerRevealed += HandleAnswerRevealed;
-        GameService.OnScoresUpdated += HandleScoresUpdated;
-        GameService.OnGameEnded += HandleGameEnded;
         GameService.OnGameError += HandleError;
     }
 
@@ -76,86 +53,10 @@
         await GameService.JoinGame(SessionCode, PlayerName);
     }
 
-    private async Task SubmitAnswer(long answerId)
-    {
-        await GameService.SubmitAnswer(SessionCode, answerId);
-        StatusMessage = "Answer submitted.";
-    }
-
-    private async Task PlaceGamble(int percentage)
-    {
-        await GameService.PlaceGamble(SessionCode, percentage);
-        StatusMessage = $"Gamble set to {percentage}%.";
-    }
-
     private void HandleGameJoined(string sessionCode, int totalPlayers, string hostName)
     {
-        SessionCode = sessionCode;
-        IsJoined = true;
-        StatusMessage = $"Joined session {sessionCode}. Waiting for host {hostName}.";
-        InvokeAsync(StateHasChanged);
-    }
-
-    private void HandleQuestionReady(QuestionData question, int timeLimit)
-    {
-        CurrentQuestion = question;
-        CurrentTimer = timeLimit;
-        LastAnswer = null;
-        StartCountdown();
-        InvokeAsync(StateHasChanged);
-    }
-
-    private void HandleAnswerRevealed(AnswerData answer)
-    {
-        LastAnswer = answer;
-        StopCountdown();
-        InvokeAsync(StateHasChanged);
-    }
-
-    private void StartCountdown()
-    {
-        StopCountdown();
-        _countdownTimer = new System.Timers.Timer(1000);
-        _countdownTimer.Elapsed += OnCountdownTick;
-        _countdownTimer.AutoReset = true;
-        _countdownTimer.Start();
-    }
-
-    private void StopCountdown()
-    {
-        if (_countdownTimer != null)
-        {
-            _countdownTimer.Stop();
-            _countdownTimer.Elapsed -= OnCountdownTick;
-            _countdownTimer.Dispose();
-            _countdownTimer = null;
-        }
-    }
-
-    private void OnCountdownTick(object? sender, ElapsedEventArgs e)
-    {
-        if (CurrentTimer > 0)
-        {
-            CurrentTimer--;
-            InvokeAsync(StateHasChanged);
-        }
-        if (CurrentTimer <= 0)
-        {
-            StopCountdown();
-        }
-    }
-
-    private void HandleScoresUpdated(LeaderboardData[] scores)
-    {
-        Leaderboard = scores;
-        InvokeAsync(StateHasChanged);
-    }
-
-    private void HandleGameEnded(LeaderboardData[] finalScores)
-    {
-        Leaderboard = finalScores;
-        StatusMessage = "Game ended.";
-        InvokeAsync(StateHasChanged);
+        var name = Uri.EscapeDataString(PlayerName.Trim());
+        Navigation.NavigateTo($"/play/{sessionCode}?name={name}", replace: false);
     }
 
     private void HandleError(string message)
@@ -166,12 +67,7 @@
 
     public void Dispose()
     {
-        StopCountdown();
         GameService.OnGameJoined -= HandleGameJoined;
-        GameService.OnQuestionReady -= HandleQuestionReady;
-        GameService.OnAnswerRevealed -= HandleAnswerRevealed;
-        GameService.OnScoresUpdated -= HandleScoresUpdated;
-        GameService.OnGameEnded -= HandleGameEnded;
         GameService.OnGameError -= HandleError;
     }
 }

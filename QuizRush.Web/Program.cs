@@ -2,12 +2,14 @@ using QuizRush.Web.Components;
 
 var builder = WebApplication.CreateBuilder(args);
 
+string apiBaseUrl = (builder.Configuration["QuizRush:ApiBaseUrl"] ?? "http://localhost:5176").TrimEnd('/') + "/";
+
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
-builder.Services.AddScoped(_ => new HttpClient
+builder.Services.AddScoped(sp => new HttpClient
 {
-    BaseAddress = new Uri("http://localhost:5176")
+    BaseAddress = new Uri(apiBaseUrl)
 });
 builder.Services.AddScoped<QuizRush.Web.Services.GameService>();
 builder.Services.AddScoped<QuizRush.Web.Services.AuthService>();
@@ -24,8 +26,8 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseAntiforgery();
+app.UseStaticFiles();
 
-app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 

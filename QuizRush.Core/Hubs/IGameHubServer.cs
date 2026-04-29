@@ -16,11 +16,17 @@ namespace QuizRush.Core.Hubs
         Task GameJoined(string sessionCode, int totalPlayers, string hostName);
         Task QuestionReady(QuestionData question, int timeLimit);
         Task SubmissionPhaseEnded();
-        Task GamblingEnabled();
+        Task GamblingPhaseStarted(int secondsRemaining);
         Task AnswerRevealed(AnswerData correctAnswer);
         Task ScoresUpdated(LeaderboardData[] leaderboard);
         Task GameEnded(LeaderboardData[] finalLeaderboard);
         Task GameError(string errorMessage);
         Task SessionExpired();
+
+        /// <summary>Confirmation to the host only after a host control action.</summary>
+        Task HostSelfAck(string message);
+
+        /// <summary>Shown to players (not the host) when the host advances or ends the game.</summary>
+        Task HostPlayerNotice(string message);
     }
 }

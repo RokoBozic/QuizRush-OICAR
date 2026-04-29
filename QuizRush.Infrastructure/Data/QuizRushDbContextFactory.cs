@@ -10,7 +10,7 @@ public class QuizRushDbContextFactory : IDesignTimeDbContextFactory<QuizRushDbCo
         var optionsBuilder = new DbContextOptionsBuilder<QuizRushDbContext>();
 
         // Use your SQL Server connection string here
-        optionsBuilder.UseSqlServer("Server=.\\SQLEXPRESS;Database=QuizRushDb;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true");
+        optionsBuilder.UseSqlServer("Server=(local);Database=QuizRushDb;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true");
 
         return new QuizRushDbContext(optionsBuilder.Options);
     }

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using QuizRush.Core.Entities;
 using QuizRush.Core.Hubs;
 using QuizRush.Core.Services;
@@ -8,15 +9,24 @@ using QuizRush.Infrastructure;
 using QuizRush.Infrastructure.Services;
 using System.Collections.Concurrent;
 using System.Security.Claims;
+using System.Threading;
 
 namespace QuizRush.Api.Hubs
 {
     public class GameHub : Hub<IGameHubServer>
     {
+        private const int QuestionTimeBufferSeconds = 2;
+        private const int GamblingPhaseSeconds = 10;
+        private const int InitialPlayerScore = 100;
+
+        private static string NormalizeSessionCode(string? sessionCode) =>
+            string.IsNullOrWhiteSpace(sessionCode) ? string.Empty : sessionCode.Trim().ToUpperInvariant();
+
         private readonly IGameSessionService _sessionService;
         private readonly IQuizService _quizService;
         private readonly QuizRushDbContext _dbContext;
         private readonly ScoreCalculationService _scoreService;
+        private readonly IServiceScopeFactory _scopeFactory;
 
         private static readonly ConcurrentDictionary<string, GameSessionState> ActiveSessions = new();
         private static readonly ConcurrentDictionary<string, PlayerConnection> ConnectionIndex = new();
@@ -25,12 +35,14 @@ namespace QuizRush.Api.Hubs
             IGameSessionService sessionService,
             IQuizService quizService,
             QuizRushDbContext dbContext,
-            ScoreCalculationService scoreService)
+            ScoreCalculationService scoreService,
+            IServiceScopeFactory scopeFactory)
         {
             _sessionService = sessionService;
             _quizService = quizService;
             _dbContext = dbContext;
             _scoreService = scoreService;
+            _scopeFactory = scopeFactory;
         }
 
         /// <summary>
@@ -45,15 +57,22 @@ namespace QuizRush.Api.Hubs
                 return;
             }
 
+            if (ActiveSessions.Values.Any(s => s.HostUserId == userId.Value))
+            {
+                await Clients.Caller.GameError("You already have an active game session. End that game before hosting another quiz.");
+                return;
+            }
+
             try
             {
                 var session = await _sessionService.CreateSessionAsync(quizId, userId.Value);
-                await Groups.AddToGroupAsync(Context.ConnectionId, session.Code);
+                string code = NormalizeSessionCode(session.Code);
+                await Groups.AddToGroupAsync(Context.ConnectionId, code);
 
-                ActiveSessions[session.Code] = new GameSessionState
+                ActiveSessions[code] = new GameSessionState
                 {
                     SessionId = session.Id,
-                    SessionCode = session.Code,
+                    SessionCode = code,
                     HostUserId = userId.Value,
                     QuizId = quizId,
                     HostConnectionId = Context.ConnectionId
@@ -61,11 +80,11 @@ namespace QuizRush.Api.Hubs
 
                 ConnectionIndex[Context.ConnectionId] = new PlayerConnection
                 {
-                    SessionCode = session.Code,
+                    SessionCode = code,
                     IsHost = true
                 };
 
-                await Clients.Caller.GameJoined(session.Code, 0, Context.User?.Identity?.Name ?? "Host");
+                await Clients.Caller.GameJoined(code, 0, Context.User?.Identity?.Name ?? "Host");
             }
             catch (Exception ex)
             {
@@ -84,22 +103,42 @@ namespace QuizRush.Api.Hubs
                 return;
             }
 
+            string code = session.SessionCode;
+
             if (!IsHostCaller(session))
             {
                 await Clients.Caller.GameError("Only host can start the game.");
                 return;
             }
 
-            var quiz = await _quizService.GetByIdAsync(session.QuizId);
-            if (quiz == null || quiz.Questions.Count == 0)
+            await Groups.AddToGroupAsync(Context.ConnectionId, code);
+            session.HostConnectionId = Context.ConnectionId;
+
+            if (session.GameLive)
             {
-                await Clients.Group(sessionCode).SessionExpired();
+                await Clients.Caller.GameError("This game has already been started.");
                 return;
             }
 
+            var quiz = await _quizService.GetByIdAsync(session.QuizId);
+            if (quiz == null || quiz.Questions.Count == 0)
+            {
+                await Clients.Group(code).SessionExpired();
+                return;
+            }
+
+            session.GameLive = true;
             session.CurrentQuestionIndex = 0;
-            await SendQuestionToGroup(sessionCode, session, quiz.Questions.OrderBy(q => q.Id).ToList());
-            await Clients.Group(sessionCode).GameStarted(quiz.Questions.Count);
+            await Clients.Group(code).GameStarted(quiz.Questions.Count);
+            try
+            {
+                await SendQuestionToGroup(code, session, quiz.Questions.OrderBy(q => q.Id).ToList());
+            }
+            catch (Exception ex)
+            {
+                session.GameLive = false;
+                await Clients.Caller.GameError($"Could not start the round: {ex.Message}");
+            }
         }
 
         /// <summary>
@@ -113,16 +152,29 @@ namespace QuizRush.Api.Hubs
                 return;
             }
 
+            string code = session.SessionCode;
+
+            CancelGamblingPhase(session);
+
             if (!IsHostCaller(session))
             {
                 await Clients.Caller.GameError("Only host can move to next question.");
                 return;
             }
 
+            await Groups.AddToGroupAsync(Context.ConnectionId, code);
+            session.HostConnectionId = Context.ConnectionId;
+
+            if (!session.GameLive)
+            {
+                await Clients.Caller.GameError("Start the game before moving to the next question.");
+                return;
+            }
+
             var quiz = await _quizService.GetByIdAsync(session.QuizId);
             if (quiz == null || quiz.Questions.Count == 0)
             {
-                await Clients.Group(sessionCode).SessionExpired();
+                await Clients.Group(code).SessionExpired();
                 return;
             }
 
@@ -135,29 +187,29 @@ namespace QuizRush.Api.Hubs
                     .FirstOrDefaultAsync(q => q.Id == session.CurrentQuestionId);
                 if (currentQuestion != null)
                 {
-                    var correct = currentQuestion.Answers.FirstOrDefault(a => a.IsCorrect);
-                    if (correct != null)
-                    {
-                        session.QuestionRevealed = true;
-                        await EndSubmissionPhase(sessionCode, session, currentQuestion, correct);
-                    }
+                    await FinalizeQuestionPhaseAsync(code, session, currentQuestion, _dbContext);
                 }
             }
 
             if (session.CurrentQuestionIndex >= orderedQuestions.Count - 1)
             {
-                await EndGame(sessionCode);
+                await EndGameAsync(code, endedAfterLastQuestionAdvance: true);
                 return;
             }
 
+            await Clients.Caller.HostSelfAck("You moved to the next question.");
+            await Clients.OthersInGroup(code).HostPlayerNotice("Next question started by host.");
+
             session.CurrentQuestionIndex++;
-            await SendQuestionToGroup(sessionCode, session, orderedQuestions);
+            await SendQuestionToGroup(code, session, orderedQuestions);
         }
 
         /// <summary>
         /// Ends the current game session and broadcasts the final leaderboard.
         /// </summary>
-        public async Task EndGame(string sessionCode)
+        public Task EndGame(string sessionCode) => EndGameAsync(sessionCode, endedAfterLastQuestionAdvance: false);
+
+        private async Task EndGameAsync(string sessionCode, bool endedAfterLastQuestionAdvance)
         {
             if (!TryGetSession(sessionCode, out var session))
             {
@@ -171,7 +223,21 @@ namespace QuizRush.Api.Hubs
                 return;
             }
 
-            var leaderboard = await GetLeaderboard(sessionCode);
+            string code = session.SessionCode;
+
+            await Groups.AddToGroupAsync(Context.ConnectionId, code);
+            session.HostConnectionId = Context.ConnectionId;
+
+            string hostAck = endedAfterLastQuestionAdvance
+                ? "There are no more questions. The game has ended."
+                : "You ended the game.";
+            await Clients.Caller.HostSelfAck(hostAck);
+            await Clients.OthersInGroup(code).HostPlayerNotice("Game ended by host.");
+
+            CancelQuestionPhaseTimer(session);
+            CancelGamblingPhase(session);
+
+            var leaderboard = await GetLeaderboard(session, _dbContext);
 
             var dbSession = await _dbContext.GameSessions.FindAsync(session.SessionId);
             if (dbSession != null)
@@ -181,8 +247,15 @@ namespace QuizRush.Api.Hubs
                 await _dbContext.SaveChangesAsync();
             }
 
-            await Clients.Group(sessionCode).GameEnded(leaderboard.ToArray());
-            ActiveSessions.TryRemove(sessionCode, out _);
+            await Clients.Group(code).GameEnded(leaderboard.ToArray());
+
+            ConnectionIndex.TryRemove(session.HostConnectionId, out _);
+            foreach (var connectionId in session.Players.Keys.ToArray())
+            {
+                ConnectionIndex.TryRemove(connectionId, out _);
+            }
+
+            ActiveSessions.TryRemove(code, out _);
         }
 
         /// <summary>
@@ -196,28 +269,60 @@ namespace QuizRush.Api.Hubs
                 return;
             }
 
-            var player = new Player
+            string code = session.SessionCode;
+
+            string normalizedName = string.IsNullOrWhiteSpace(playerName) ? "Guest" : playerName.Trim();
+            long? userId = GetCurrentUserId();
+
+            var existingPlayer = await _dbContext.Players
+                .FirstOrDefaultAsync(p => p.GameSessionId == session.SessionId && p.Name == normalizedName);
+
+            Player player;
+            if (existingPlayer != null)
             {
-                GameSessionId = session.SessionId,
-                Name = string.IsNullOrWhiteSpace(playerName) ? "Guest" : playerName.Trim(),
-                UserId = GetCurrentUserId()
-            };
+                player = existingPlayer;
+                foreach (var kvp in session.Players.ToArray())
+                {
+                    if (kvp.Value.Id == player.Id)
+                    {
+                        if (session.Players.TryRemove(kvp.Key, out _))
+                        {
+                            ConnectionIndex.TryRemove(kvp.Key, out _);
+                            await Groups.RemoveFromGroupAsync(kvp.Key, code);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                player = new Player
+                {
+                    GameSessionId = session.SessionId,
+                    Name = normalizedName,
+                    UserId = userId,
+                    Score = InitialPlayerScore
+                };
 
-            _dbContext.Players.Add(player);
-            await _dbContext.SaveChangesAsync();
+                _dbContext.Players.Add(player);
+                await _dbContext.SaveChangesAsync();
+            }
 
-            await Groups.AddToGroupAsync(Context.ConnectionId, sessionCode);
+            await Groups.AddToGroupAsync(Context.ConnectionId, code);
 
             session.Players[Context.ConnectionId] = player;
             ConnectionIndex[Context.ConnectionId] = new PlayerConnection
             {
-                SessionCode = sessionCode,
+                SessionCode = code,
                 IsHost = false
             };
 
             int totalPlayers = session.Players.Count;
-            await Clients.Group(sessionCode).PlayerJoined(player.Name, totalPlayers);
-            await Clients.Caller.GameJoined(sessionCode, totalPlayers, "Host");
+            if (existingPlayer == null)
+            {
+                await Clients.Group(code).PlayerJoined(player.Name, totalPlayers);
+            }
+
+            await Clients.Caller.GameJoined(code, totalPlayers, "Host");
         }
 
         /// <summary>
@@ -231,72 +336,198 @@ namespace QuizRush.Api.Hubs
                 return;
             }
 
+            string code = session.SessionCode;
+
             if (!session.Players.TryGetValue(Context.ConnectionId, out var player))
             {
                 await Clients.Caller.GameError("Player not in session.");
                 return;
             }
 
-            bool alreadyAnswered = await _dbContext.PlayerAnswers
-                .AnyAsync(pa => pa.PlayerId == player.Id && pa.QuestionId == session.CurrentQuestionId);
-            if (alreadyAnswered)
+            if (session.InGamblingPhase)
+            {
+                await Clients.Caller.GameError("Wait until the question appears before answering.");
+                return;
+            }
+
+            if (session.QuestionRevealed)
+            {
+                await Clients.Caller.GameError("Question phase has ended.");
+                return;
+            }
+
+            if (!session.SubmittedConnectionIdsForQuestion.TryAdd(Context.ConnectionId, 0))
             {
                 await Clients.Caller.GameError("Already answered this question.");
                 return;
             }
 
-            var question = await _dbContext.Questions
-                .Include(q => q.Answers)
-                .FirstOrDefaultAsync(q => q.Id == session.CurrentQuestionId);
-
-            if (question == null)
+            bool answerCommitted = false;
+            try
             {
-                await Clients.Caller.GameError("Question not found.");
-                return;
+                bool alreadyAnswered = await _dbContext.PlayerAnswers
+                    .AnyAsync(pa => pa.PlayerId == player.Id && pa.QuestionId == session.CurrentQuestionId);
+                if (alreadyAnswered)
+                {
+                    await Clients.Caller.GameError("Already answered this question.");
+                    return;
+                }
+
+                var question = await _dbContext.Questions
+                    .Include(q => q.Answers)
+                    .FirstOrDefaultAsync(q => q.Id == session.CurrentQuestionId);
+
+                if (question == null)
+                {
+                    await Clients.Caller.GameError("Question not found.");
+                    return;
+                }
+
+                var answer = question.Answers.FirstOrDefault(a => a.Id == answerId);
+                if (answer == null)
+                {
+                    await Clients.Caller.GameError("Answer does not belong to current question.");
+                    return;
+                }
+
+                int elapsedSeconds = (int)Math.Max(0, (DateTime.UtcNow - session.QuestionStartedAt).TotalSeconds);
+                bool isCorrect = answer.IsCorrect;
+                int scoreBeforeAnswer = player.Score;
+                int basePoints = _scoreService.CalculatePoints(question.PointsValue, elapsedSeconds, isCorrect);
+                int gamblePercent = session.GamblingPercentages.TryGetValue(Context.ConnectionId, out int gp) ? gp : 0;
+                int finalPoints = _scoreService.ApplyGambling(basePoints, scoreBeforeAnswer, gamblePercent, isCorrect);
+
+                var playerAnswer = new PlayerAnswer
+                {
+                    GameSessionId = session.SessionId,
+                    PlayerId = player.Id,
+                    QuestionId = question.Id,
+                    AnswerId = answer.Id,
+                    ScoreEarned = finalPoints,
+                    ResponseTime = TimeSpan.FromSeconds(elapsedSeconds),
+                    AnsweredAt = DateTime.UtcNow
+                };
+
+                _dbContext.PlayerAnswers.Add(playerAnswer);
+                player.Score += finalPoints;
+                await _dbContext.SaveChangesAsync();
+                answerCommitted = true;
+
+                int playersAnswered = await _dbContext.PlayerAnswers
+                    .CountAsync(pa => pa.GameSessionId == session.SessionId && pa.QuestionId == question.Id);
+
+                int totalPlayers = session.Players.Count;
+                await Clients.Group(code).QuestionAnswered(playersAnswered, totalPlayers);
+
+                if (playersAnswered >= totalPlayers && totalPlayers > 0)
+                {
+                    await FinalizeQuestionPhaseAsync(code, session, question, _dbContext);
+                }
             }
-
-            var answer = question.Answers.FirstOrDefault(a => a.Id == answerId);
-            if (answer == null)
+            finally
             {
-                await Clients.Caller.GameError("Answer does not belong to current question.");
-                return;
-            }
-
-            int elapsedSeconds = (int)Math.Max(0, (DateTime.UtcNow - session.QuestionStartedAt).TotalSeconds);
-            bool isCorrect = answer.IsCorrect;
-            int basePoints = _scoreService.CalculatePoints(question.PointsValue, elapsedSeconds, isCorrect);
-            int gamblePercent = session.GamblingPercentages.TryGetValue(player.Id, out int gp) ? gp : 0;
-            int finalPoints = _scoreService.ApplyGambling(basePoints, gamblePercent, isCorrect);
-
-            var playerAnswer = new PlayerAnswer
-            {
-                GameSessionId = session.SessionId,
-                PlayerId = player.Id,
-                QuestionId = question.Id,
-                AnswerId = answer.Id,
-                ScoreEarned = finalPoints,
-                ResponseTime = TimeSpan.FromSeconds(elapsedSeconds),
-                AnsweredAt = DateTime.UtcNow
-            };
-
-            _dbContext.PlayerAnswers.Add(playerAnswer);
-            player.Score += finalPoints;
-            await _dbContext.SaveChangesAsync();
-
-            int playersAnswered = await _dbContext.PlayerAnswers
-                .CountAsync(pa => pa.GameSessionId == session.SessionId && pa.QuestionId == question.Id);
-
-            int totalPlayers = session.Players.Count;
-            await Clients.Group(sessionCode).QuestionAnswered(playersAnswered, totalPlayers);
-
-            if (playersAnswered >= totalPlayers && totalPlayers > 0 && !session.QuestionRevealed)
-            {
-                session.QuestionRevealed = true;
-                await EndSubmissionPhase(sessionCode, session, question, answer);
+                if (!answerCommitted)
+                {
+                    session.SubmittedConnectionIdsForQuestion.TryRemove(Context.ConnectionId, out _);
+                }
             }
         }
 
-        private async Task EndSubmissionPhase(string sessionCode, GameSessionState session, QuizRush.Core.Entities.Question question, QuizRush.Core.Entities.Answer submittedAnswer)
+        private void CancelQuestionPhaseTimer(GameSessionState session)
+        {
+            session.QuestionPhaseCts?.Cancel();
+            session.QuestionPhaseCts?.Dispose();
+            session.QuestionPhaseCts = null;
+        }
+
+        private void CancelGamblingPhase(GameSessionState session)
+        {
+            session.GamblingPhaseCts?.Cancel();
+            session.GamblingPhaseCts?.Dispose();
+            session.GamblingPhaseCts = null;
+            session.InGamblingPhase = false;
+        }
+
+        private void StartQuestionPhaseTimer(string sessionCode, GameSessionState session, QuizRush.Core.Entities.Question question, int timeLimitSeconds)
+        {
+            CancelQuestionPhaseTimer(session);
+            var cts = new CancellationTokenSource();
+            session.QuestionPhaseCts = cts;
+            long questionId = question.Id;
+            _ = RunQuestionPhaseTimeoutAsync(sessionCode, questionId, timeLimitSeconds, cts.Token);
+        }
+
+        private async Task RunQuestionPhaseTimeoutAsync(string sessionCode, long questionId, int timeLimitSeconds, CancellationToken cancellationToken)
+        {
+            try
+            {
+                int delayMs = (timeLimitSeconds + QuestionTimeBufferSeconds) * 1000;
+                await Task.Delay(delayMs, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+
+            if (!TryGetSession(sessionCode, out var session))
+            {
+                return;
+            }
+
+            if (session.QuestionRevealed || session.CurrentQuestionId != questionId)
+            {
+                return;
+            }
+
+            await using var scope = _scopeFactory.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<QuizRushDbContext>();
+            var question = await db.Questions
+                .Include(q => q.Answers)
+                .FirstOrDefaultAsync(q => q.Id == questionId);
+
+            if (question == null)
+            {
+                return;
+            }
+
+            await FinalizeQuestionPhaseAsync(sessionCode, session, question, db);
+        }
+
+        private async Task FinalizeQuestionPhaseAsync(string sessionCode, GameSessionState session, QuizRush.Core.Entities.Question question, QuizRushDbContext db)
+        {
+            await session.RevealPhaseMutex.WaitAsync();
+            try
+            {
+                if (!TryGetSession(sessionCode, out var live) || !ReferenceEquals(live, session))
+                {
+                    return;
+                }
+
+                if (session.QuestionRevealed || session.CurrentQuestionId != question.Id)
+                {
+                    return;
+                }
+
+                var revealAnswer = question.Answers.FirstOrDefault(a => a.IsCorrect)
+                    ?? question.Answers.FirstOrDefault();
+
+                if (revealAnswer == null)
+                {
+                    return;
+                }
+
+                session.QuestionRevealed = true;
+                CancelQuestionPhaseTimer(session);
+
+                await EndSubmissionPhase(sessionCode, session, question, revealAnswer, db);
+            }
+            finally
+            {
+                session.RevealPhaseMutex.Release();
+            }
+        }
+
+        private async Task EndSubmissionPhase(string sessionCode, GameSessionState session, QuizRush.Core.Entities.Question question, QuizRush.Core.Entities.Answer submittedAnswer, QuizRushDbContext db)
         {
             var correctAnswer = question.Answers.FirstOrDefault(a => a.IsCorrect) ?? submittedAnswer;
 
@@ -308,7 +539,7 @@ namespace QuizRush.Api.Hubs
                 Text = correctAnswer.Text,
                 IsCorrect = correctAnswer.IsCorrect
             });
-            await Clients.Group(sessionCode).ScoresUpdated((await GetLeaderboard(sessionCode)).ToArray());
+            await Clients.Group(sessionCode).ScoresUpdated((await GetLeaderboard(session, db)).ToArray());
         }
 
         /// <summary>
@@ -334,7 +565,13 @@ namespace QuizRush.Api.Hubs
                 return;
             }
 
-            session.GamblingPercentages[player.Id] = gamblingPercentage;
+            if (!session.InGamblingPhase)
+            {
+                await Clients.Caller.GameError("Gambling is only allowed during the gambling phase.");
+                return;
+            }
+
+            session.GamblingPercentages[Context.ConnectionId] = gamblingPercentage;
 
             var action = new GamblingAction
             {
@@ -347,8 +584,6 @@ namespace QuizRush.Api.Hubs
 
             _dbContext.GamblingActions.Add(action);
             await _dbContext.SaveChangesAsync();
-
-            await Clients.Caller.GamblingEnabled();
         }
 
         /// <summary>
@@ -361,23 +596,55 @@ namespace QuizRush.Api.Hubs
                 return;
             }
 
+            string code = session.SessionCode;
+
             if (session.Players.TryRemove(Context.ConnectionId, out var player))
             {
-                await Clients.Group(sessionCode).PlayerLeft(player.Name, session.Players.Count);
+                await Clients.Group(code).PlayerLeft(player.Name, session.Players.Count);
             }
 
             ConnectionIndex.TryRemove(Context.ConnectionId, out _);
-            await Groups.RemoveFromGroupAsync(Context.ConnectionId, sessionCode);
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, code);
         }
 
         public override async Task OnDisconnectedAsync(Exception? exception)
         {
             if (ConnectionIndex.TryRemove(Context.ConnectionId, out var info))
             {
-                await LeaveGame(info.SessionCode);
+                string code = NormalizeSessionCode(info.SessionCode);
+                if (TryGetSession(code, out var session))
+                {
+                    if (info.IsHost && session.HostConnectionId == Context.ConnectionId)
+                    {
+                        await AbandonSessionAsHostDisconnectedAsync(code, session);
+                    }
+                    else if (!info.IsHost)
+                    {
+                        await LeaveGame(code);
+                    }
+                }
             }
 
             await base.OnDisconnectedAsync(exception);
+        }
+
+        /// <summary>
+        /// Drops the in-memory session when the host disconnects so they can host again and players are notified.
+        /// </summary>
+        private async Task AbandonSessionAsHostDisconnectedAsync(string code, GameSessionState session)
+        {
+            CancelQuestionPhaseTimer(session);
+            CancelGamblingPhase(session);
+            foreach (var connectionId in session.Players.Keys.ToArray())
+            {
+                ConnectionIndex.TryRemove(connectionId, out _);
+                await Groups.RemoveFromGroupAsync(connectionId, code);
+            }
+
+            ConnectionIndex.TryRemove(session.HostConnectionId, out _);
+            await Groups.RemoveFromGroupAsync(Context.ConnectionId, code);
+            await Clients.Group(code).SessionExpired();
+            ActiveSessions.TryRemove(code, out _);
         }
 
         private long? GetCurrentUserId()
@@ -388,7 +655,14 @@ namespace QuizRush.Api.Hubs
 
         private bool TryGetSession(string sessionCode, out GameSessionState state)
         {
-            return ActiveSessions.TryGetValue(sessionCode, out state!);
+            string key = NormalizeSessionCode(sessionCode);
+            if (string.IsNullOrEmpty(key))
+            {
+                state = null!;
+                return false;
+            }
+
+            return ActiveSessions.TryGetValue(key, out state!);
         }
 
         private bool IsHostCaller(GameSessionState session)
@@ -399,16 +673,59 @@ namespace QuizRush.Api.Hubs
             }
 
             long? userId = GetCurrentUserId();
-            return userId.HasValue && userId.Value == session.HostUserId;
+            if (userId.HasValue && userId.Value == session.HostUserId)
+            {
+                // Same host after SignalR reconnect (new connection id) — keep hub state aligned
+                session.HostConnectionId = Context.ConnectionId;
+                return true;
+            }
+
+            return false;
         }
 
         private async Task SendQuestionToGroup(string sessionCode, GameSessionState session, List<QuizRush.Core.Entities.Question> questions)
         {
+            int generation = Interlocked.Increment(ref session.QuestionLifecycleGeneration);
+            CancelQuestionPhaseTimer(session);
+            CancelGamblingPhase(session);
+
             var question = questions[session.CurrentQuestionIndex];
             session.CurrentQuestionId = question.Id;
-            session.QuestionStartedAt = DateTime.UtcNow;
             session.QuestionRevealed = false;
             session.GamblingPercentages.Clear();
+            session.SubmittedConnectionIdsForQuestion.Clear();
+
+            var gamblingCts = new CancellationTokenSource();
+            session.GamblingPhaseCts = gamblingCts;
+            session.InGamblingPhase = true;
+
+            await Clients.Group(sessionCode).GamblingPhaseStarted(GamblingPhaseSeconds);
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(GamblingPhaseSeconds), gamblingCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                if (!TryGetSession(sessionCode, out var checkSession) || checkSession.QuestionLifecycleGeneration != generation)
+                {
+                    return;
+                }
+            }
+            finally
+            {
+                if (TryGetSession(sessionCode, out var phaseSession) && phaseSession.QuestionLifecycleGeneration == generation)
+                {
+                    phaseSession.InGamblingPhase = false;
+                }
+            }
+
+            if (!TryGetSession(sessionCode, out var liveSession) || liveSession.QuestionLifecycleGeneration != generation)
+            {
+                return;
+            }
+
+            liveSession.QuestionStartedAt = DateTime.UtcNow;
 
             var payload = new QuestionData
             {
@@ -424,13 +741,19 @@ namespace QuizRush.Api.Hubs
             };
 
             await Clients.Group(sessionCode).QuestionReady(payload, question.TimeLimitSeconds);
-            await Clients.Group(sessionCode).QuestionDisplayed(session.CurrentQuestionIndex + 1, question.TimeLimitSeconds);
+            await Clients.Group(sessionCode).QuestionDisplayed(liveSession.CurrentQuestionIndex + 1, question.TimeLimitSeconds);
+
+            if (!TryGetSession(sessionCode, out liveSession) || liveSession.QuestionLifecycleGeneration != generation)
+            {
+                return;
+            }
+
+            StartQuestionPhaseTimer(sessionCode, liveSession, question, question.TimeLimitSeconds);
         }
 
-        private async Task<List<LeaderboardData>> GetLeaderboard(string sessionCode)
+        private async Task<List<LeaderboardData>> GetLeaderboard(GameSessionState session, QuizRushDbContext db)
         {
-            var session = ActiveSessions[sessionCode];
-            var players = await _dbContext.Players
+            var players = await db.Players
                 .Where(p => p.GameSessionId == session.SessionId)
                 .OrderByDescending(p => p.Score)
                 .ToListAsync();
@@ -455,7 +778,14 @@ namespace QuizRush.Api.Hubs
             public DateTime QuestionStartedAt { get; set; }
             public bool QuestionRevealed { get; set; }
             public ConcurrentDictionary<string, Player> Players { get; } = new();
-            public ConcurrentDictionary<long, int> GamblingPercentages { get; } = new();
+            public ConcurrentDictionary<string, int> GamblingPercentages { get; } = new();
+            public ConcurrentDictionary<string, byte> SubmittedConnectionIdsForQuestion { get; } = new();
+            public CancellationTokenSource? QuestionPhaseCts { get; set; }
+            public CancellationTokenSource? GamblingPhaseCts { get; set; }
+            public bool InGamblingPhase { get; set; }
+            public int QuestionLifecycleGeneration;
+            public SemaphoreSlim RevealPhaseMutex { get; } = new(1, 1);
+            public bool GameLive { get; set; }
         }
 
         private sealed class PlayerConnection

@@ -13,17 +13,39 @@ namespace QuizRush.Web.Services
 
         public async Task<string?> GetItemAsync(string key)
         {
-            return await _jsRuntime.InvokeAsync<string?>("localStorage.getItem", key);
+            try
+            {
+                return await _jsRuntime.InvokeAsync<string?>("localStorage.getItem", key);
+            }
+            catch (InvalidOperationException)
+            {
+                // Static prerender / no circuit yet — treat as missing key
+                return null;
+            }
         }
 
         public async Task SetItemAsync(string key, string value)
         {
-            await _jsRuntime.InvokeVoidAsync("localStorage.setItem", key, value);
+            try
+            {
+                await _jsRuntime.InvokeVoidAsync("localStorage.setItem", key, value);
+            }
+            catch (InvalidOperationException)
+            {
+                // No interactive runtime (e.g. prerender) — ignore
+            }
         }
 
         public async Task RemoveItemAsync(string key)
         {
-            await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", key);
+            try
+            {
+                await _jsRuntime.InvokeVoidAsync("localStorage.removeItem", key);
+            }
+            catch (InvalidOperationException)
+            {
+                // No interactive runtime — ignore
+            }
         }
     }
 }

@@ -60,15 +60,14 @@ builder.Services.AddSwaggerGen(options =>
 });
 builder.Services.AddSignalR();
 
+string[] blazorOrigins = builder.Configuration.GetSection("Cors:BlazorOrigins").Get<string[]>()
+    ?? new[] { "http://localhost:5261", "https://localhost:7291", "http://localhost:5177", "http://localhost:5178" };
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowBlazor", policy =>
     {
-        policy.WithOrigins(
-                "http://localhost:5261",
-                "https://localhost:7291",
-                "http://localhost:5177",
-                "http://localhost:5178")
+        policy.WithOrigins(blazorOrigins)
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials();
@@ -104,6 +103,23 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidIssuer = builder.Configuration["Jwt:Issuer"],
             ValidateAudience = true,
             ValidAudience = builder.Configuration["Jwt:Audience"]
+        };
+
+        // WebSockets cannot send Authorization headers; SignalR passes JWT as ?access_token=
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+                if (!string.IsNullOrEmpty(accessToken) &&
+                    path.StartsWithSegments("/hub"))
+                {
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
+            }
         };
     });
 

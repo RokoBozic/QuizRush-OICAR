@@ -6,13 +6,18 @@
 @inject HttpClient Http
 @inject AuthService AuthService
 @inject GameService GameService
+@inject NavigationManager Navigation
 @implements IDisposable
 
 <PageTitle>Host Game</PageTitle>
 
 <h1>Host Game</h1>
 
-@if (!IsAuthenticated)
+@if (!_clientInitialized)
+{
+    <p class="text-muted">Loading…</p>
+}
+else if (!IsAuthenticated)
 {
     <div class="alert alert-warning">
         Only registered users can host games or create quizzes.
@@ -23,10 +28,10 @@ else
 {
     <HostQuizSelector Quizzes="Quizzes" SelectedQuizChanged="OnSelectedQuizChanged" />
 
-    <div class="d-flex gap-2 mb-3">
-        <button class="btn btn-primary" @onclick="CreateSession" disabled="@(!SelectedQuizId.HasValue)">Host Selected Quiz</button>
+    <div class="d-flex gap-2 mb-3 flex-wrap">
+        <button class="btn btn-primary" @onclick="CreateSession" disabled="@(!SelectedQuizId.HasValue || HasActiveSession)">Host Selected Quiz</button>
         <button class="btn btn-success" @onclick="StartGame" disabled="@string.IsNullOrWhiteSpace(SessionCode)">Start Game</button>
-        <button class="btn btn-outline-primary" @onclick="NextQuestion" disabled="@string.IsNullOrWhiteSpace(SessionCode)">Next Question</button>
+        <button class="btn btn-outline-primary" @onclick="NextQuestion" disabled="@string.IsNullOrWhiteSpace(SessionCode) || !GameLive">Next Question</button>
         <button class="btn btn-danger" @onclick="EndGame" disabled="@string.IsNullOrWhiteSpace(SessionCode)">End Game</button>
     </div>
 
@@ -53,12 +58,24 @@ else
     private LeaderboardData[] Leaderboard { get; set; } = Array.Empty<LeaderboardData>();
     private List<string> Players { get; } = [];
     private System.Timers.Timer? _countdownTimer;
+    private bool _clientInitialized;
+    private bool GameLive { get; set; }
+    private bool HasActiveSession => !string.IsNullOrWhiteSpace(SessionCode);
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (!firstRender || _clientInitialized)
+        {
+            return;
+        }
+
+        _clientInitialized = true;
+
         IsAuthenticated = await AuthService.IsAuthenticatedAsync();
         if (!IsAuthenticated)
         {
+            Navigation.NavigateTo("/login", replace: true);
+            await InvokeAsync(StateHasChanged);
             return;
         }
 
@@ -72,6 +89,17 @@ else
         GameService.OnGameEnded += HandleGameEnded;
         GameService.OnGameJoined += HandleGameJoined;
         GameService.OnGameError += HandleError;
+        GameService.OnGamblingPhaseStarted += HandleGamblingPhaseStarted;
+        GameService.OnGameStarted += HandleGameStarted;
+        GameService.OnHostSelfAck += HandleHostSelfAck;
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleGamblingPhaseStarted(int seconds)
+    {
+        StatusMessage = $"Gambling phase — {seconds}s for players to set gamble.";
+        InvokeAsync(StateHasChanged);
     }
 
     private Task OnSelectedQuizChanged(long? quizId)
@@ -90,17 +118,52 @@ else
         await GameService.HostGame(SelectedQuizId.Value);
     }
 
-    private async Task StartGame() => await GameService.StartGame(SessionCode);
+    /// <summary>
+    /// Run long hub invocations off the Blazor synchronization context so incoming hub callbacks
+    /// (GameStarted, GamblingPhaseStarted, etc.) can be delivered without a deadlock.
+    /// </summary>
+    private async Task RunHubInvokeAsync(Func<Task> invoke)
+    {
+        try
+        {
+            await Task.Run(invoke).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            await InvokeAsync(() =>
+            {
+                StatusMessage = ex.GetBaseException().Message;
+            }).ConfigureAwait(false);
+        }
 
-    private async Task NextQuestion() => await GameService.NextQuestion(SessionCode);
+        await InvokeAsync(StateHasChanged).ConfigureAwait(false);
+    }
 
-    private async Task EndGame() => await GameService.EndGame(SessionCode);
+    private Task StartGame() => RunHubInvokeAsync(() => GameService.StartGame(SessionCode));
+
+    private Task NextQuestion() => RunHubInvokeAsync(() => GameService.NextQuestion(SessionCode));
+
+    private Task EndGame() => RunHubInvokeAsync(() => GameService.EndGame(SessionCode));
 
     private void HandleGameJoined(string sessionCode, int totalPlayers, string hostName)
     {
-        SessionCode = sessionCode;
+        SessionCode = sessionCode.Trim().ToUpperInvariant();
         PlayerCount = totalPlayers;
+        GameLive = false;
         StatusMessage = $"Hosting session {sessionCode} as {hostName}.";
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleGameStarted(int questionCount)
+    {
+        GameLive = true;
+        StatusMessage = $"Game started — {questionCount} question(s).";
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleHostSelfAck(string message)
+    {
+        StatusMessage = message;
         InvokeAsync(StateHasChanged);
     }
 
@@ -166,14 +229,40 @@ else
     private void HandleGameEnded(LeaderboardData[] finalScores)
     {
         Leaderboard = finalScores;
-        StatusMessage = "Game ended.";
+        SessionCode = string.Empty;
+        GameLive = false;
+        PlayerCount = 0;
+        Players.Clear();
+        CurrentQuestion = null;
+        AnsweredCount = 0;
+        StopCountdown();
+        StatusMessage = "Game ended. You can host a new quiz when you are ready.";
         InvokeAsync(StateHasChanged);
     }
 
     private void HandleError(string error)
     {
         StatusMessage = error;
+        if (ShouldClearGameLiveAfterHubError(error))
+        {
+            GameLive = false;
+        }
+
         InvokeAsync(StateHasChanged);
+    }
+
+    /// <summary>
+    /// Server may reset <c>GameLive</c> after a failed start while the client already received <c>GameStarted</c>.
+    /// </summary>
+    private static bool ShouldClearGameLiveAfterHubError(string error)
+    {
+        if (string.IsNullOrWhiteSpace(error))
+        {
+            return false;
+        }
+
+        return error.Contains("Could not start", StringComparison.OrdinalIgnoreCase)
+            || error.Contains("Session not found", StringComparison.OrdinalIgnoreCase);
     }
 
     public void Dispose()
@@ -185,5 +274,8 @@ else
         GameService.OnGameEnded -= HandleGameEnded;
         GameService.OnGameJoined -= HandleGameJoined;
         GameService.OnGameError -= HandleError;
+        GameService.OnGamblingPhaseStarted -= HandleGamblingPhaseStarted;
+        GameService.OnGameStarted -= HandleGameStarted;
+        GameService.OnHostSelfAck -= HandleHostSelfAck;
     }
 }
