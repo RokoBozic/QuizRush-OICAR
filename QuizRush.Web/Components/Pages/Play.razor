@@ -26,7 +26,11 @@ else
 
     @if (ShowGamblingPhase)
     {
-        <div class="alert alert-warning mb-3">Gambling phase — choose how much to gamble on this question.</div>
+        <div class="alert alert-warning mb-3">
+            Gambling phase — choose how much to gamble on this question.
+            <br />
+            <strong>Time remaining: @GamblingSecondsLeft seconds</strong>
+        </div>
         <PlayerGamblingWidget OnSelect="PlaceGamble" />
     }
 
@@ -50,11 +54,13 @@ else
     public string? PlayerName { get; set; }
 
     private int CurrentTimer { get; set; }
+    private int GamblingSecondsLeft { get; set; }
     private string StatusMessage { get; set; } = string.Empty;
     private QuestionData? CurrentQuestion { get; set; }
     private LeaderboardData[] Leaderboard { get; set; } = Array.Empty<LeaderboardData>();
     private AnswerData? LastAnswer { get; set; }
     private System.Timers.Timer? _countdownTimer;
+    private System.Timers.Timer? _gamblingTimer;
     private bool ShowGamblingPhase { get; set; }
     private bool _joinDispatched;
 
@@ -102,7 +108,9 @@ else
         ShowGamblingPhase = true;
         CurrentQuestion = null;
         LastAnswer = null;
+        GamblingSecondsLeft = secondsRemaining;
         StopCountdown();
+        StartGamblingCountdown();
         InvokeAsync(StateHasChanged);
     }
 
@@ -148,6 +156,40 @@ else
         _countdownTimer.Elapsed += OnCountdownTick;
         _countdownTimer.AutoReset = true;
         _countdownTimer.Start();
+    }
+
+    private void StartGamblingCountdown()
+    {
+        StopGamblingCountdown();
+        _gamblingTimer = new System.Timers.Timer(1000);
+        _gamblingTimer.Elapsed += OnGamblingCountdownTick;
+        _gamblingTimer.AutoReset = true;
+        _gamblingTimer.Start();
+    }
+
+    private void StopGamblingCountdown()
+    {
+        if (_gamblingTimer != null)
+        {
+            _gamblingTimer.Stop();
+            _gamblingTimer.Elapsed -= OnGamblingCountdownTick;
+            _gamblingTimer.Dispose();
+            _gamblingTimer = null;
+        }
+    }
+
+    private void OnGamblingCountdownTick(object? sender, ElapsedEventArgs e)
+    {
+        if (GamblingSecondsLeft > 0)
+        {
+            GamblingSecondsLeft--;
+            InvokeAsync(StateHasChanged);
+        }
+
+        if (GamblingSecondsLeft <= 0)
+        {
+            StopGamblingCountdown();
+        }
     }
 
     private void StopCountdown()
@@ -197,6 +239,7 @@ else
     public void Dispose()
     {
         StopCountdown();
+        StopGamblingCountdown();
         GameService.OnQuestionReady -= HandleQuestionReady;
         GameService.OnAnswerRevealed -= HandleAnswerRevealed;
         GameService.OnScoresUpdated -= HandleScoresUpdated;

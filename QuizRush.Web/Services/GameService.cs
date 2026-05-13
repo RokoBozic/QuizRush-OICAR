@@ -89,6 +89,12 @@ namespace QuizRush.Web.Services
             await Hub.InvokeAsync("HostGame", quizId).ConfigureAwait(false);
         }
 
+        public async Task RejoinGame(string sessionCode)
+        {
+            await EnsureConnectedAsync();
+            await Hub.InvokeAsync("RejoinGame", sessionCode).ConfigureAwait(false);
+        }
+
         public async Task JoinGame(string sessionCode, string playerName)
         {
             await EnsureConnectedAsync();

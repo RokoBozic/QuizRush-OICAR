@@ -46,6 +46,69 @@ namespace QuizRush.Api.Hubs
         }
 
         /// <summary>
+        /// Rejoin an existing game session as host (for page refreshes).
+        /// </summary>
+        public async Task RejoinGame(string sessionCode)
+        {
+            if (!TryGetSession(sessionCode, out var session))
+            {
+                await Clients.Caller.GameError("Session not found.");
+                return;
+            }
+
+            long? userId = GetCurrentUserId();
+            if (!userId.HasValue || session.HostUserId != userId.Value)
+            {
+                await Clients.Caller.GameError("Only the original host can rejoin this session.");
+                return;
+            }
+
+            string code = session.SessionCode;
+            await Groups.AddToGroupAsync(Context.ConnectionId, code);
+            session.HostConnectionId = Context.ConnectionId;
+
+            ConnectionIndex[Context.ConnectionId] = new PlayerConnection
+            {
+                SessionCode = code,
+                IsHost = true
+            };
+
+            int playerCount = session.Players.Count;
+            await Clients.Caller.GameJoined(code, playerCount, Context.User?.Identity?.Name ?? "Host");
+
+            if (session.GameLive)
+            {
+                await Clients.Caller.GameStarted(0);
+            }
+
+            if (session.GameLive && session.CurrentQuestionId > 0)
+            {
+                var question = await _dbContext.Questions
+                    .Include(q => q.Answers)
+                    .FirstOrDefaultAsync(q => q.Id == session.CurrentQuestionId);
+                if (question != null)
+                {
+                    var payload = new QuestionData
+                    {
+                        QuestionId = question.Id,
+                        Text = question.Text,
+                        PointsValue = question.PointsValue,
+                        TimeLimit = question.TimeLimitSeconds,
+                        Answers = question.Answers.Select(a => new AnswerOptionData
+                        {
+                            AnswerId = a.Id,
+                            Text = a.Text
+                        }).ToList()
+                    };
+                    await Clients.Caller.QuestionReady(payload, question.TimeLimitSeconds);
+                }
+            }
+
+            var leaderboard = await GetLeaderboard(session, _dbContext);
+            await Clients.Caller.ScoresUpdated(leaderboard.ToArray());
+        }
+
+        /// <summary>
         /// Creates a host-controlled game session and adds host connection to the SignalR group.
         /// </summary>
         public async Task HostGame(long quizId)
@@ -236,6 +299,7 @@ namespace QuizRush.Api.Hubs
 
             CancelQuestionPhaseTimer(session);
             CancelGamblingPhase(session);
+            session.GameEnded = true;
 
             var leaderboard = await GetLeaderboard(session, _dbContext);
 
@@ -344,6 +408,12 @@ namespace QuizRush.Api.Hubs
                 return;
             }
 
+            if (session.GameEnded)
+            {
+                await Clients.Caller.GameError("Game has ended.");
+                return;
+            }
+
             if (session.InGamblingPhase)
             {
                 await Clients.Caller.GameError("Wait until the question appears before answering.");
@@ -393,7 +463,8 @@ namespace QuizRush.Api.Hubs
                 int elapsedSeconds = (int)Math.Max(0, (DateTime.UtcNow - session.QuestionStartedAt).TotalSeconds);
                 bool isCorrect = answer.IsCorrect;
                 int scoreBeforeAnswer = player.Score;
-                int basePoints = _scoreService.CalculatePoints(question.PointsValue, elapsedSeconds, isCorrect);
+                int questionPoints = question.PointsValue > 0 ? question.PointsValue : 100;
+                int basePoints = _scoreService.CalculatePoints(questionPoints, elapsedSeconds, isCorrect);
                 int gamblePercent = session.GamblingPercentages.TryGetValue(Context.ConnectionId, out int gp) ? gp : 0;
                 int finalPoints = _scoreService.ApplyGambling(basePoints, scoreBeforeAnswer, gamblePercent, isCorrect);
 
@@ -410,6 +481,7 @@ namespace QuizRush.Api.Hubs
 
                 _dbContext.PlayerAnswers.Add(playerAnswer);
                 player.Score += finalPoints;
+                _dbContext.Players.Update(player);
                 await _dbContext.SaveChangesAsync();
                 answerCommitted = true;
 
@@ -786,6 +858,7 @@ namespace QuizRush.Api.Hubs
             public int QuestionLifecycleGeneration;
             public SemaphoreSlim RevealPhaseMutex { get; } = new(1, 1);
             public bool GameLive { get; set; }
+            public bool GameEnded { get; set; }
         }
 
         private sealed class PlayerConnection

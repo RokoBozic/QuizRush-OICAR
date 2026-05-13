@@ -7,6 +7,7 @@
 @inject AuthService AuthService
 @inject GameService GameService
 @inject NavigationManager Navigation
+@inject IJSRuntime Js
 @implements IDisposable
 
 <PageTitle>Host Game</PageTitle>
@@ -93,6 +94,22 @@ else
         GameService.OnGameStarted += HandleGameStarted;
         GameService.OnHostSelfAck += HandleHostSelfAck;
 
+        // Try to rejoin existing session if host refreshed
+        var storedSessionCode = await GetStoredSessionCodeAsync();
+        if (!string.IsNullOrEmpty(storedSessionCode))
+        {
+            try
+            {
+                await GameService.EnsureConnectedAsync();
+                await GameService.RejoinGame(storedSessionCode);
+            }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Could not rejoin session: {ex.Message}";
+                await ClearStoredSessionCodeAsync();
+            }
+        }
+
         await InvokeAsync(StateHasChanged);
     }
 
@@ -151,6 +168,7 @@ else
         PlayerCount = totalPlayers;
         GameLive = false;
         StatusMessage = $"Hosting session {sessionCode} as {hostName}.";
+        _ = SaveSessionCodeAsync(SessionCode);
         InvokeAsync(StateHasChanged);
     }
 
@@ -237,6 +255,7 @@ else
         AnsweredCount = 0;
         StopCountdown();
         StatusMessage = "Game ended. You can host a new quiz when you are ready.";
+        _ = ClearStoredSessionCodeAsync();
         InvokeAsync(StateHasChanged);
     }
 
@@ -263,6 +282,42 @@ else
 
         return error.Contains("Could not start", StringComparison.OrdinalIgnoreCase)
             || error.Contains("Session not found", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task<string?> GetStoredSessionCodeAsync()
+    {
+        try
+        {
+            return await Js.InvokeAsync<string>("localStorage.getItem", "hostSessionCode");
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private async Task SaveSessionCodeAsync(string sessionCode)
+    {
+        try
+        {
+            await Js.InvokeAsync<object>("localStorage.setItem", "hostSessionCode", sessionCode);
+        }
+        catch
+        {
+            // Silent fail - localStorage not available
+        }
+    }
+
+    private async Task ClearStoredSessionCodeAsync()
+    {
+        try
+        {
+            await Js.InvokeAsync<object>("localStorage.removeItem", "hostSessionCode");
+        }
+        catch
+        {
+            // Silent fail
+        }
     }
 
     public void Dispose()
