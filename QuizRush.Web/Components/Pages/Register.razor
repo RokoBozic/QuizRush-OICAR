@@ -1,5 +1,6 @@
 @page "/register"
 @rendermode InteractiveServer
+@using System.Text.RegularExpressions
 @using QuizRush.Web.Services
 @inject AuthService AuthService
 @inject NavigationManager Navigation
@@ -11,25 +12,61 @@
 <div class="card col-md-6">
     <div class="card-body">
         <div class="mb-3">
-            <label class="form-label">Username</label>
-            <input class="form-control" @bind="Username" />
+            <label class="form-label">Username <span class="text-danger">*</span></label>
+            <input class="form-control @(UsernameError != null ? "is-invalid" : "")"
+                   @bind="Username"
+                   @bind:event="oninput"
+                   @onkeypress="HandleKeyPress" />
+            @if (UsernameError != null)
+            {
+                <div class="invalid-feedback">@UsernameError</div>
+            }
+            else
+            {
+                <small class="form-text text-muted">3-50 characters, letters and numbers only.</small>
+            }
         </div>
         <div class="mb-3">
-            <label class="form-label">Email</label>
-            <input class="form-control" @bind="Email" />
+            <label class="form-label">Email <span class="text-danger">*</span></label>
+            <input class="form-control @(EmailError != null ? "is-invalid" : "")"
+                   @bind="Email"
+                   @bind:event="oninput"
+                   @onkeypress="HandleKeyPress" />
+            @if (EmailError != null)
+            {
+                <div class="invalid-feedback">@EmailError</div>
+            }
         </div>
         <div class="mb-3">
-            <label class="form-label">Password</label>
-            <input type="password" class="form-control" @bind="Password" />
+            <label class="form-label">Password <span class="text-danger">*</span></label>
+            <input type="password"
+                   class="form-control @(PasswordError != null ? "is-invalid" : "")"
+                   @bind="Password"
+                   @bind:event="oninput"
+                   @onkeypress="HandleKeyPress" />
+            @if (PasswordError != null)
+            {
+                <div class="invalid-feedback">@PasswordError</div>
+            }
+            else
+            {
+                <small class="form-text text-muted">At least 8 characters, must include letters and numbers.</small>
+            }
         </div>
-        <button class="btn btn-primary" @onclick="HandleRegister">Create Account</button>
+        <button class="btn btn-primary" @onclick="HandleRegister" disabled="@_submitting">
+            @if (_submitting)
+            {
+                <span class="spinner-border spinner-border-sm me-2"></span>
+            }
+            Create Account
+        </button>
         <a class="btn btn-link" href="/login">Already have account?</a>
     </div>
 </div>
 
 @if (!string.IsNullOrWhiteSpace(Message))
 {
-    <div class="alert alert-info mt-3">@Message</div>
+    <div class="alert @(IsError ? "alert-danger" : "alert-success") mt-3">@Message</div>
 }
 
 @code {
@@ -37,17 +74,113 @@
     private string Email { get; set; } = string.Empty;
     private string Password { get; set; } = string.Empty;
     private string Message { get; set; } = string.Empty;
+    private bool IsError { get; set; }
+    private bool _submitting;
+
+    private string? UsernameError { get; set; }
+    private string? EmailError { get; set; }
+    private string? PasswordError { get; set; }
+
+    private bool Validate()
+    {
+        UsernameError = null;
+        EmailError = null;
+        PasswordError = null;
+
+        if (string.IsNullOrWhiteSpace(Username))
+        {
+            UsernameError = "Username is required.";
+        }
+        else if (Username.Length < 3)
+        {
+            UsernameError = "Username must be at least 3 characters.";
+        }
+        else if (Username.Length > 50)
+        {
+            UsernameError = "Username cannot exceed 50 characters.";
+        }
+        else if (!Regex.IsMatch(Username, @"^[a-zA-Z0-9_]+$"))
+        {
+            UsernameError = "Username can only contain letters, numbers, and underscores.";
+        }
+
+        if (string.IsNullOrWhiteSpace(Email))
+        {
+            EmailError = "Email is required.";
+        }
+        else if (!Regex.IsMatch(Email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+        {
+            EmailError = "Please enter a valid email address.";
+        }
+        else if (Email.Length > 100)
+        {
+            EmailError = "Email cannot exceed 100 characters.";
+        }
+
+        if (string.IsNullOrWhiteSpace(Password))
+        {
+            PasswordError = "Password is required.";
+        }
+        else if (Password.Length < 8)
+        {
+            PasswordError = "Password must be at least 8 characters.";
+        }
+        else if (!Regex.IsMatch(Password, @"[a-zA-Z]"))
+        {
+            PasswordError = "Password must contain at least one letter.";
+        }
+        else if (!Regex.IsMatch(Password, @"[0-9]"))
+        {
+            PasswordError = "Password must contain at least one number.";
+        }
+
+        return UsernameError == null && EmailError == null && PasswordError == null;
+    }
+
+    private async Task HandleKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await HandleRegister();
+        }
+    }
 
     private async Task HandleRegister()
     {
-        var result = await AuthService.RegisterAsync(Username, Email, Password);
-        if (result == null)
+        Message = string.Empty;
+        IsError = false;
+
+        if (!Validate())
         {
-            Message = "Registration failed.";
             return;
         }
 
-        Message = result;
-        Navigation.NavigateTo("/login");
+        _submitting = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var result = await AuthService.RegisterAsync(Username, Email, Password);
+            if (result == null)
+            {
+                IsError = true;
+                Message = "Registration failed. Email or username may already be in use.";
+                return;
+            }
+
+            Message = "Account created! Redirecting to login...";
+            await Task.Delay(1500);
+            Navigation.NavigateTo("/login");
+        }
+        catch (Exception ex)
+        {
+            IsError = true;
+            Message = $"Registration error: {ex.Message}";
+        }
+        finally
+        {
+            _submitting = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 }

@@ -485,6 +485,17 @@ namespace QuizRush.Api.Hubs
                 await _dbContext.SaveChangesAsync();
                 answerCommitted = true;
 
+                // Send immediate personal feedback to the player about THEIR answer
+                await Clients.Caller.AnswerRevealed(new AnswerData
+                {
+                    AnswerId = answer.Id,
+                    Text = answer.Text,
+                    IsCorrect = isCorrect,
+                    BasePoints = basePoints,
+                    GamblingBonus = finalPoints - basePoints,
+                    TotalPoints = finalPoints
+                });
+
                 int playersAnswered = await _dbContext.PlayerAnswers
                     .CountAsync(pa => pa.GameSessionId == session.SessionId && pa.QuestionId == question.Id);
 
@@ -605,12 +616,18 @@ namespace QuizRush.Api.Hubs
 
             await Clients.Group(sessionCode).SubmissionPhaseEnded();
             await Clients.Group(sessionCode).AllPlayersAnswered();
-            await Clients.Group(sessionCode).AnswerRevealed(new AnswerData
+
+            // Send the correct answer ONLY to the host - players already got personal feedback in SubmitAnswer
+            if (!string.IsNullOrEmpty(session.HostConnectionId))
             {
-                AnswerId = correctAnswer.Id,
-                Text = correctAnswer.Text,
-                IsCorrect = correctAnswer.IsCorrect
-            });
+                await Clients.Client(session.HostConnectionId).AnswerRevealed(new AnswerData
+                {
+                    AnswerId = correctAnswer.Id,
+                    Text = correctAnswer.Text,
+                    IsCorrect = correctAnswer.IsCorrect
+                });
+            }
+
             await Clients.Group(sessionCode).ScoresUpdated((await GetLeaderboard(session, db)).ToArray());
         }
 

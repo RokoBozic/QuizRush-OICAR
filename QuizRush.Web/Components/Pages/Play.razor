@@ -7,39 +7,106 @@
 @inject NavigationManager Navigation
 @implements IDisposable
 
-<PageTitle>Play</PageTitle>
+<PageTitle>Play - @SessionCode</PageTitle>
 
 @if (string.IsNullOrWhiteSpace(PlayerName))
 {
     <div class="alert alert-warning">Missing player name. Join from the Join Game page.</div>
     <a class="btn btn-primary" href="/join">Join Game</a>
 }
+else if (GameOver)
+{
+    <div class="card mb-3 border-success">
+        <div class="card-header bg-success text-white">
+            <h3 class="mb-0">🎉 Game Over!</h3>
+        </div>
+        <div class="card-body text-center">
+            <h4 class="text-muted">Final Score for @PlayerName</h4>
+            <h1 class="display-1 text-primary">@MyFinalScore</h1>
+            <h5 class="mt-3">
+                @if (MyRank == 1)
+                {
+                    <span class="badge bg-warning fs-5">🥇 1st Place!</span>
+                }
+                else if (MyRank == 2)
+                {
+                    <span class="badge bg-secondary fs-5">🥈 2nd Place</span>
+                }
+                else if (MyRank == 3)
+                {
+                    <span class="badge bg-danger fs-5">🥉 3rd Place</span>
+                }
+                else if (MyRank > 0)
+                {
+                    <span class="badge bg-info fs-5">Rank: @MyRank</span>
+                }
+            </h5>
+        </div>
+    </div>
+
+    <PlayerLeaderboard Items="Leaderboard" CurrentPlayerName="@PlayerName" />
+
+    <div class="text-center mt-3">
+        <a href="/join" class="btn btn-primary">Play Another Game</a>
+    </div>
+}
 else
 {
-    <h1>Playing — @SessionCode</h1>
+    <div class="d-flex justify-content-between align-items-center">
+        <h1>Playing — <span class="badge bg-primary">@SessionCode</span></h1>
+        @if (TotalQuestions > 0 && CurrentQuestionNumber > 0)
+        {
+            <span class="badge bg-info fs-5">Question @CurrentQuestionNumber / @TotalQuestions</span>
+        }
+    </div>
     <p class="text-muted">Playing as <strong>@PlayerName</strong></p>
 
-    @if (CurrentQuestion == null && !ShowGamblingPhase)
+    @if (CurrentQuestion == null && LastAnswer == null)
     {
         <PlayerWaitingRoom />
     }
 
-    @if (ShowGamblingPhase)
+    @if (CurrentQuestion != null && LastAnswer == null)
     {
-        <div class="alert alert-warning mb-3">
-            Gambling phase — choose how much to gamble on this question.
-            <br />
-            <strong>Time remaining: @GamblingSecondsLeft seconds</strong>
+        <PlayerQuestionDisplay Question="CurrentQuestion" SecondsRemaining="@CurrentTimer" OnAnswerSubmit="SubmitAnswer" />
+    }
+
+    @if (LastAnswer != null)
+    {
+        <div class="card mb-3 @(LastAnswer.IsCorrect ? "border-success" : "border-danger")">
+            <div class="card-body text-center">
+                <h4 class="@(LastAnswer.IsCorrect ? "text-success" : "text-danger")">
+                    @(LastAnswer.IsCorrect ? "✅ Correct answer!" : "❌ Wrong answer!")
+                </h4>
+                <div class="mt-3">
+                    <p class="mb-1">Base points: <strong>@LastAnswer.BasePoints</strong></p>
+                    @if (LastAnswer.GamblingBonus != 0)
+                    {
+                        <p class="mb-1">
+                            Gambling @(LastAnswer.GamblingBonus > 0 ? "bonus" : "penalty"):
+                            <strong class="@(LastAnswer.GamblingBonus > 0 ? "text-success" : "text-danger")">
+                                @(LastAnswer.GamblingBonus > 0 ? "+" : "")@LastAnswer.GamblingBonus
+                            </strong>
+                        </p>
+                    }
+                    <hr />
+                    <h5>
+                        Total earned: <span class="@(LastAnswer.TotalPoints > 0 ? "text-success" : "text-muted")">
+                            @(LastAnswer.TotalPoints > 0 ? "+" : "")@LastAnswer.TotalPoints
+                        </span>
+                    </h5>
+                </div>
+                <p class="text-muted mt-2">Waiting for next question...</p>
+            </div>
         </div>
+    }
+
+    @if (CurrentQuestion != null && !ShowGamblingPhase && LastAnswer == null)
+    {
         <PlayerGamblingWidget OnSelect="PlaceGamble" />
     }
 
-    @if (CurrentQuestion != null)
-    {
-        <PlayerQuestionDisplay Question="CurrentQuestion" SecondsRemaining="@CurrentTimer" OnAnswerSubmit="SubmitAnswer" />
-        <PlayerFeedback Answer="LastAnswer" />
-        <PlayerLeaderboard Items="Leaderboard" CurrentPlayerName="@PlayerName" />
-    }
+    <PlayerLeaderboard Items="Leaderboard" CurrentPlayerName="@PlayerName" />
 
     @if (!string.IsNullOrWhiteSpace(StatusMessage))
     {
@@ -54,14 +121,17 @@ else
     public string? PlayerName { get; set; }
 
     private int CurrentTimer { get; set; }
-    private int GamblingSecondsLeft { get; set; }
+    private int TotalQuestions { get; set; }
+    private int CurrentQuestionNumber { get; set; }
     private string StatusMessage { get; set; } = string.Empty;
     private QuestionData? CurrentQuestion { get; set; }
     private LeaderboardData[] Leaderboard { get; set; } = Array.Empty<LeaderboardData>();
     private AnswerData? LastAnswer { get; set; }
     private System.Timers.Timer? _countdownTimer;
-    private System.Timers.Timer? _gamblingTimer;
     private bool ShowGamblingPhase { get; set; }
+    private bool GameOver { get; set; }
+    private int MyFinalScore { get; set; }
+    private int MyRank { get; set; }
     private bool _joinDispatched;
 
     protected override void OnInitialized()
@@ -74,7 +144,21 @@ else
         GameService.OnGameEnded += HandleGameEnded;
         GameService.OnGameError += HandleError;
         GameService.OnGamblingPhaseStarted += HandleGamblingPhaseStarted;
-        GameService.OnHostPlayerNotice += HandleHostPlayerNotice;
+        GameService.OnGameStarted += HandleGameStarted;
+        GameService.OnQuestionDisplayed += HandleQuestionDisplayed;
+    }
+
+    private void HandleGameStarted(int questionCount)
+    {
+        TotalQuestions = questionCount;
+        CurrentQuestionNumber = 0;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleQuestionDisplayed(int questionNumber, int timeLimit)
+    {
+        CurrentQuestionNumber = questionNumber;
+        InvokeAsync(StateHasChanged);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -106,24 +190,12 @@ else
     private void HandleGamblingPhaseStarted(int secondsRemaining)
     {
         ShowGamblingPhase = true;
-        CurrentQuestion = null;
-        LastAnswer = null;
-        GamblingSecondsLeft = secondsRemaining;
-        StopCountdown();
-        StartGamblingCountdown();
-        InvokeAsync(StateHasChanged);
-    }
-
-    private void HandleHostPlayerNotice(string message)
-    {
-        StatusMessage = message;
         InvokeAsync(StateHasChanged);
     }
 
     private async Task SubmitAnswer(long answerId)
     {
         await GameService.SubmitAnswer(SessionCode, answerId);
-        StatusMessage = "Answer submitted.";
     }
 
     private async Task PlaceGamble(int percentage)
@@ -138,6 +210,7 @@ else
         CurrentQuestion = question;
         CurrentTimer = timeLimit;
         LastAnswer = null;
+        StatusMessage = string.Empty;
         StartCountdown();
         InvokeAsync(StateHasChanged);
     }
@@ -149,6 +222,29 @@ else
         InvokeAsync(StateHasChanged);
     }
 
+    private void HandleScoresUpdated(LeaderboardData[] scores)
+    {
+        Leaderboard = scores;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleGameEnded(LeaderboardData[] finalScores)
+    {
+        Leaderboard = finalScores;
+        GameOver = true;
+        StopCountdown();
+
+        var myEntry = finalScores.FirstOrDefault(s =>
+            string.Equals(s.PlayerName, PlayerName, StringComparison.OrdinalIgnoreCase));
+        if (myEntry != null)
+        {
+            MyFinalScore = myEntry.Score;
+            MyRank = myEntry.Rank;
+        }
+
+        InvokeAsync(StateHasChanged);
+    }
+
     private void StartCountdown()
     {
         StopCountdown();
@@ -156,40 +252,6 @@ else
         _countdownTimer.Elapsed += OnCountdownTick;
         _countdownTimer.AutoReset = true;
         _countdownTimer.Start();
-    }
-
-    private void StartGamblingCountdown()
-    {
-        StopGamblingCountdown();
-        _gamblingTimer = new System.Timers.Timer(1000);
-        _gamblingTimer.Elapsed += OnGamblingCountdownTick;
-        _gamblingTimer.AutoReset = true;
-        _gamblingTimer.Start();
-    }
-
-    private void StopGamblingCountdown()
-    {
-        if (_gamblingTimer != null)
-        {
-            _gamblingTimer.Stop();
-            _gamblingTimer.Elapsed -= OnGamblingCountdownTick;
-            _gamblingTimer.Dispose();
-            _gamblingTimer = null;
-        }
-    }
-
-    private void OnGamblingCountdownTick(object? sender, ElapsedEventArgs e)
-    {
-        if (GamblingSecondsLeft > 0)
-        {
-            GamblingSecondsLeft--;
-            InvokeAsync(StateHasChanged);
-        }
-
-        if (GamblingSecondsLeft <= 0)
-        {
-            StopGamblingCountdown();
-        }
     }
 
     private void StopCountdown()
@@ -217,19 +279,6 @@ else
         }
     }
 
-    private void HandleScoresUpdated(LeaderboardData[] scores)
-    {
-        Leaderboard = scores;
-        InvokeAsync(StateHasChanged);
-    }
-
-    private void HandleGameEnded(LeaderboardData[] finalScores)
-    {
-        Leaderboard = finalScores;
-        StatusMessage = "Game ended by host.";
-        InvokeAsync(StateHasChanged);
-    }
-
     private void HandleError(string message)
     {
         StatusMessage = message;
@@ -239,13 +288,13 @@ else
     public void Dispose()
     {
         StopCountdown();
-        StopGamblingCountdown();
         GameService.OnQuestionReady -= HandleQuestionReady;
         GameService.OnAnswerRevealed -= HandleAnswerRevealed;
         GameService.OnScoresUpdated -= HandleScoresUpdated;
         GameService.OnGameEnded -= HandleGameEnded;
         GameService.OnGameError -= HandleError;
         GameService.OnGamblingPhaseStarted -= HandleGamblingPhaseStarted;
-        GameService.OnHostPlayerNotice -= HandleHostPlayerNotice;
+        GameService.OnGameStarted -= HandleGameStarted;
+        GameService.OnQuestionDisplayed -= HandleQuestionDisplayed;
     }
 }

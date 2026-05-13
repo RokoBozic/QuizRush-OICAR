@@ -1,5 +1,6 @@
 @page "/login"
 @rendermode InteractiveServer
+@using System.Text.RegularExpressions
 @using QuizRush.Web.Services
 @inject AuthService AuthService
 @inject NavigationManager Navigation
@@ -11,38 +12,119 @@
 <div class="card col-md-6">
     <div class="card-body">
         <div class="mb-3">
-            <label class="form-label">Email</label>
-            <input class="form-control" @bind="Email" />
+            <label class="form-label">Email <span class="text-danger">*</span></label>
+            <input class="form-control @(EmailError != null ? "is-invalid" : "")"
+                   @bind="Email"
+                   @bind:event="oninput"
+                   @onkeypress="HandleKeyPress" />
+            @if (EmailError != null)
+            {
+                <div class="invalid-feedback">@EmailError</div>
+            }
         </div>
         <div class="mb-3">
-            <label class="form-label">Password</label>
-            <input type="password" class="form-control" @bind="Password" />
+            <label class="form-label">Password <span class="text-danger">*</span></label>
+            <input type="password"
+                   class="form-control @(PasswordError != null ? "is-invalid" : "")"
+                   @bind="Password"
+                   @bind:event="oninput"
+                   @onkeypress="HandleKeyPress" />
+            @if (PasswordError != null)
+            {
+                <div class="invalid-feedback">@PasswordError</div>
+            }
         </div>
-        <button class="btn btn-primary" @onclick="HandleLogin">Login</button>
+        <button class="btn btn-primary" @onclick="HandleLogin" disabled="@_submitting">
+            @if (_submitting)
+            {
+                <span class="spinner-border spinner-border-sm me-2"></span>
+            }
+            Login
+        </button>
         <a class="btn btn-link" href="/register">Create account</a>
     </div>
 </div>
 
 @if (!string.IsNullOrWhiteSpace(Message))
 {
-    <div class="alert alert-info mt-3">@Message</div>
+    <div class="alert @(IsError ? "alert-danger" : "alert-success") mt-3">@Message</div>
 }
 
 @code {
     private string Email { get; set; } = string.Empty;
     private string Password { get; set; } = string.Empty;
     private string Message { get; set; } = string.Empty;
+    private bool IsError { get; set; }
+    private bool _submitting;
+
+    private string? EmailError { get; set; }
+    private string? PasswordError { get; set; }
+
+    private bool Validate()
+    {
+        EmailError = null;
+        PasswordError = null;
+
+        if (string.IsNullOrWhiteSpace(Email))
+        {
+            EmailError = "Email is required.";
+        }
+        else if (!Regex.IsMatch(Email, @"^[^@\s]+@[^@\s]+\.[^@\s]+$"))
+        {
+            EmailError = "Please enter a valid email address.";
+        }
+
+        if (string.IsNullOrWhiteSpace(Password))
+        {
+            PasswordError = "Password is required.";
+        }
+
+        return EmailError == null && PasswordError == null;
+    }
+
+    private async Task HandleKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await HandleLogin();
+        }
+    }
 
     private async Task HandleLogin()
     {
-        var response = await AuthService.LoginAsync(Email, Password);
-        if (response == null)
+        Message = string.Empty;
+        IsError = false;
+
+        if (!Validate())
         {
-            Message = "Login failed. Check credentials.";
             return;
         }
 
-        Message = "Login successful.";
-        Navigation.NavigateTo("/host");
+        _submitting = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var response = await AuthService.LoginAsync(Email, Password);
+            if (response == null)
+            {
+                IsError = true;
+                Message = "Login failed. Check credentials.";
+                return;
+            }
+
+            Message = "Login successful.";
+            Navigation.NavigateTo("/host");
+        }
+        catch (Exception ex)
+        {
+            IsError = true;
+            Message = $"Login error: {ex.Message}";
+        }
+        finally
+        {
+            _submitting = false;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 }

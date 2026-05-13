@@ -1,0 +1,182 @@
+@page "/dashboard/host"
+@rendermode InteractiveServer
+@using System.Net.Http.Json
+@using QuizRush.Core.ViewModels
+@using QuizRush.Web.Services
+@inject HttpClient Http
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>Host Dashboard</PageTitle>
+
+<h1>Host Dashboard</h1>
+
+@if (!_clientReady)
+{
+    <p class="text-muted">Loading…</p>
+}
+else if (!_isAuthenticated)
+{
+    <div class="alert alert-warning">You must be signed in to access the dashboard.</div>
+    <a class="btn btn-primary" href="/login">Login</a>
+}
+else
+{
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-title text-muted">Total Quizzes</h6>
+                    <h3>@_quizzes.Count</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-title text-muted">Total Questions</h6>
+                    <h3>@_quizzes.Sum(q => q.Questions.Count)</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-title text-muted">Total Sessions Hosted</h6>
+                    <h3>@_sessionCount</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-6">
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">My Quizzes</h5>
+                    <a href="/quizzes/create" class="btn btn-sm btn-primary">+ Create Quiz</a>
+                </div>
+                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                    @if (_quizzes.Count == 0)
+                    {
+                        <p class="text-muted">No quizzes yet. <a href="/quizzes/create">Create one</a></p>
+                    }
+                    else
+                    {
+                        <div class="list-group">
+                            @foreach (var quiz in _quizzes.OrderByDescending(q => q.CreatedAt))
+                            {
+                                <div class="list-group-item">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div>
+                                            <h6 class="mb-1">@quiz.Title</h6>
+                                            <small class="text-muted">@quiz.Questions.Count questions</small>
+                                            <br />
+                                            <small class="text-muted">Created: @quiz.CreatedAt.ToString("MMM d, yyyy")</small>
+                                        </div>
+                                        <div>
+                                            <a href="/host?quizId=@quiz.Id" class="btn btn-sm btn-success">Host</a>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Recent Sessions</h5>
+                </div>
+                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                    @if (_sessions.Count == 0)
+                    {
+                        <p class="text-muted">No sessions yet.</p>
+                    }
+                    else
+                    {
+                        <div class="list-group">
+                            @foreach (var session in _sessions.OrderByDescending(s => s.CreatedAt).Take(10))
+                            {
+                                <div class="list-group-item">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div>
+                                            <h6 class="mb-1">Session @session.Code</h6>
+                                            <small class="text-muted">@session.CreatedAt.ToString("MMM d, yyyy HH:mm")</small>
+                                            <br />
+                                            <small class="text-muted">
+                                                @if (session.Status.ToString() == "Active")
+                                                {
+                                                    <span class="badge bg-success">Active</span>
+                                                }
+                                                else if (session.Status.ToString() == "Completed")
+                                                {
+                                                    <span class="badge bg-secondary">Completed</span>
+                                                }
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool _clientReady;
+    private bool _isAuthenticated;
+    private List<QuizResponseViewModel> _quizzes = new();
+    private List<GameSessionViewModel> _sessions = new();
+    private int _sessionCount;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _clientReady)
+        {
+            return;
+        }
+
+        _clientReady = true;
+
+        _isAuthenticated = await AuthService.IsAuthenticatedAsync();
+        if (!_isAuthenticated)
+        {
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        await AuthService.ApplyAuthorizationHeaderAsync(Http);
+
+        try
+        {
+            var quizzes = await Http.GetFromJsonAsync<List<QuizResponseViewModel>>("api/quiz");
+            _quizzes = quizzes ?? [];
+
+            var sessions = await Http.GetFromJsonAsync<List<GameSessionViewModel>>("api/gamesession");
+            _sessions = sessions ?? [];
+            _sessionCount = _sessions.Count;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading dashboard: {ex.Message}");
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public class GameSessionViewModel
+    {
+        public long Id { get; set; }
+        public string Code { get; set; } = string.Empty;
+        public DateTime CreatedAt { get; set; }
+        public DateTime? EndTime { get; set; }
+        public string Status { get; set; } = string.Empty;
+    }
+}

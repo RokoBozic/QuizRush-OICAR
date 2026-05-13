@@ -1,0 +1,31 @@
+@page "/logout"
+@rendermode InteractiveServer
+@using QuizRush.Web.Services
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+@inject IJSRuntime Js
+
+<PageTitle>Logout</PageTitle>
+
+<h1>Logging out...</h1>
+
+<p class="text-muted">Please wait while we sign you out.</p>
+
+@code {
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        try
+        {
+            await Js.InvokeAsync<object>("localStorage.removeItem", "hostSessionCode");
+        }
+        catch
+        {
+            // Silent fail
+        }
+
+        await AuthService.LogoutAsync();
+        Navigation.NavigateTo("/", forceLoad: true);
+    }
+}

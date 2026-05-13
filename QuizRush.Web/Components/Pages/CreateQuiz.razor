@@ -27,16 +27,20 @@ else
         <div class="col-lg-10">
             <div class="card mb-3">
                 <div class="card-body">
-                    <h5 class="card-title">Quiz details</h5>
+                    <h5 class="card-title">Quiz Details</h5>
                     <div class="mb-3">
                         <label class="form-label">Title <span class="text-danger">*</span></label>
-                        <input class="form-control" maxlength="100" @bind="Model.Title" placeholder="At least 3 characters" />
+                        <input class="form-control" maxlength="100" @bind="Model.Title" placeholder="Quiz title" />
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Description</label>
-                        <textarea class="form-control" rows="2" maxlength="2000" @bind="Model.Description" placeholder="Optional"></textarea>
+                        <textarea class="form-control" rows="2" maxlength="2000" @bind="Model.Description" placeholder="Optional description"></textarea>
                     </div>
                 </div>
+            </div>
+
+            <div class="mb-3">
+                <h5>Questions <span class="badge bg-info">@Model.Questions.Count</span></h5>
             </div>
 
             @for (var qi = 0; qi < Model.Questions.Count; qi++)
@@ -45,16 +49,26 @@ else
                 var question = Model.Questions[qIndex];
                 <div class="card mb-3 border-primary">
                     <div class="card-header d-flex justify-content-between align-items-center">
-                        <span>Question @(qIndex + 1)</span>
+                        <div>
+                            <span>Question @(qIndex + 1)</span>
+                            @if (qIndex > 0)
+                            {
+                                <button type="button" class="btn btn-sm btn-outline-secondary ms-2" @onclick="() => MoveQuestionUp(qIndex)" title="Move up">↑</button>
+                            }
+                            @if (qIndex < Model.Questions.Count - 1)
+                            {
+                                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => MoveQuestionDown(qIndex)" title="Move down">↓</button>
+                            }
+                        </div>
                         @if (Model.Questions.Count > 1)
                         {
-                            <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => RemoveQuestion(qIndex)">Remove question</button>
+                            <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => RemoveQuestion(qIndex)">Remove</button>
                         }
                     </div>
                     <div class="card-body">
                         <div class="mb-3">
-                            <label class="form-label">Question text <span class="text-danger">*</span></label>
-                            <input class="form-control" maxlength="500" @bind="question.Text" />
+                            <label class="form-label">Question Text <span class="text-danger">*</span></label>
+                            <textarea class="form-control" rows="2" maxlength="500" @bind="question.Text"></textarea>
                         </div>
                         <div class="row mb-3">
                             <div class="col-md-4">
@@ -62,18 +76,18 @@ else
                                 <input type="number" class="form-control" min="0" max="1000" @bind="question.PointsValue" />
                             </div>
                             <div class="col-md-4">
-                                <label class="form-label">Time limit (seconds)</label>
+                                <label class="form-label">Time Limit (seconds)</label>
                                 <input type="number" class="form-control" min="5" max="600" @bind="question.TimeLimitSeconds" />
                             </div>
                         </div>
-                        <h6 class="text-muted">Answers (at least 2; mark one or more as correct)</h6>
+                        <h6 class="text-muted">Answers (at least 2; mark one as correct)</h6>
                         @for (var ai = 0; ai < question.Answers.Count; ai++)
                         {
                             var aIndex = ai;
                             var answer = question.Answers[aIndex];
                             <div class="input-group mb-2">
                                 <div class="input-group-text">
-                                    <input type="checkbox" class="form-check-input mt-0" title="Correct answer" @bind="answer.IsCorrect" />
+                                    <input type="radio" name="correct_@qIndex" @onchange="@((ChangeEventArgs e) => SetCorrectAnswer(qIndex, aIndex, (bool)e.Value!))" checked="@answer.IsCorrect" />
                                 </div>
                                 <input class="form-control" maxlength="250" @bind="answer.Text" placeholder="Answer text" />
                                 @if (question.Answers.Count > 2)
@@ -82,15 +96,21 @@ else
                                 }
                             </div>
                         }
-                        <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => AddAnswer(qIndex)">Add answer</button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => AddAnswer(qIndex)">+ Add Answer</button>
                     </div>
                 </div>
             }
 
-            <button type="button" class="btn btn-secondary mb-3" @onclick="AddQuestion">Add question</button>
+            <button type="button" class="btn btn-secondary mb-3" @onclick="AddQuestion">+ Add Question</button>
 
             <div class="d-flex gap-2 mb-4">
-                <button type="button" class="btn btn-primary" @onclick="SubmitAsync" disabled="@_submitting">Save quiz</button>
+                <button type="button" class="btn btn-primary" @onclick="SubmitAsync" disabled="@_submitting">
+                    @if (_submitting)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2"></span>
+                    }
+                    Save Quiz
+                </button>
                 <a class="btn btn-outline-secondary" href="/host">Cancel</a>
             </div>
         </div>
@@ -168,6 +188,22 @@ else
         Model.Questions.RemoveAt(index);
     }
 
+    private void MoveQuestionUp(int index)
+    {
+        if (index <= 0) return;
+        var temp = Model.Questions[index];
+        Model.Questions[index] = Model.Questions[index - 1];
+        Model.Questions[index - 1] = temp;
+    }
+
+    private void MoveQuestionDown(int index)
+    {
+        if (index >= Model.Questions.Count - 1) return;
+        var temp = Model.Questions[index];
+        Model.Questions[index] = Model.Questions[index + 1];
+        Model.Questions[index + 1] = temp;
+    }
+
     private void AddAnswer(int questionIndex)
     {
         Model.Questions[questionIndex].Answers.Add(new AnswerViewModel { Text = string.Empty, IsCorrect = false });
@@ -182,6 +218,18 @@ else
         }
 
         answers.RemoveAt(answerIndex);
+    }
+
+    private void SetCorrectAnswer(int questionIndex, int answerIndex, bool isCorrect)
+    {
+        if (!isCorrect) return;
+
+        var question = Model.Questions[questionIndex];
+        foreach (var answer in question.Answers)
+        {
+            answer.IsCorrect = false;
+        }
+        question.Answers[answerIndex].IsCorrect = true;
     }
 
     private async Task SubmitAsync()
@@ -222,7 +270,7 @@ else
             if (!q.Answers.Any(a => a.IsCorrect))
             {
                 StatusIsError = true;
-                StatusMessage = "Each question needs at least one correct answer.";
+                StatusMessage = "Each question needs one correct answer.";
                 return;
             }
         }
@@ -247,10 +295,11 @@ else
             {
                 var created = await response.Content.ReadFromJsonAsync<QuizResponseViewModel>();
                 StatusMessage = created != null
-                    ? $"Quiz “{created.Title}” saved (id {created.Id}). You can host it from Host Game."
-                    : "Quiz saved.";
+                    ? $"Quiz \"{created.Title}\" created successfully!"
+                    : "Quiz created.";
                 Model = CreateEmptyQuiz();
-                await InvokeAsync(StateHasChanged);
+                await Task.Delay(1500);
+                Navigation.NavigateTo("/host");
                 return;
             }
 

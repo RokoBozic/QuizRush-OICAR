@@ -1,9 +1,7 @@
-﻿@rendermode InteractiveServer
+@rendermode InteractiveServer
 @using QuizRush.Web.Services
-@implements IDisposable
 @inject AuthService AuthService
-@inject NavigationManager Navigation
-@inject GameService GameService
+@implements IDisposable
 
 <div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
@@ -27,22 +25,39 @@
             </NavLink>
         </div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="host">
-                <span class="bi bi-broadcast" aria-hidden="true"></span> Host Game
-            </NavLink>
-        </div>
-
-        @if (IsAuthenticated)
+        @if (_isAuthenticated)
         {
             <div class="nav-item px-3">
+                <NavLink class="nav-link" href="host">
+                    <span class="bi bi-broadcast" aria-hidden="true"></span> Host Game
+                </NavLink>
+            </div>
+
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="dashboard/host">
+                    <span class="bi bi-graph-up" aria-hidden="true"></span> Host Dashboard
+                </NavLink>
+            </div>
+
+            <div class="nav-item px-3">
                 <NavLink class="nav-link" href="quizzes/create">
-                    <span class="bi bi-journal-plus" aria-hidden="true"></span> Create Quiz
+                    <span class="bi bi-plus-circle" aria-hidden="true"></span> Create Quiz
+                </NavLink>
+            </div>
+
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="account/player">
+                    <span class="bi bi-person-circle" aria-hidden="true"></span> My Account
+                </NavLink>
+            </div>
+
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="logout">
+                    <span class="bi bi-box-arrow-right" aria-hidden="true"></span> Logout
                 </NavLink>
             </div>
         }
-
-        @if (!IsAuthenticated)
+        else
         {
             <div class="nav-item px-3">
                 <NavLink class="nav-link" href="login">
@@ -56,56 +71,35 @@
                 </NavLink>
             </div>
         }
-        else
-        {
-            <div class="nav-item px-3">
-                <button type="button" class="nav-link btn btn-link text-start w-100 border-0 p-0" style="color: white;" @onclick="LogoutAsync">
-                    <span class="bi bi-box-arrow-right" aria-hidden="true"></span> Logout
-                </button>
-            </div>
-        }
     </nav>
 </div>
 
 @code {
-    private bool IsAuthenticated { get; set; }
+    private bool _isAuthenticated;
+    private bool _initialized;
 
     protected override void OnInitialized()
     {
-        AuthService.AuthenticationStateChanged += OnAuthenticationStateChanged;
+        AuthService.OnAuthStateChanged += HandleAuthStateChanged;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (!firstRender)
-        {
-            return;
-        }
+        if (!firstRender || _initialized) return;
 
-        IsAuthenticated = await AuthService.IsAuthenticatedAsync();
-        StateHasChanged();
-    }
-
-    private void OnAuthenticationStateChanged()
-    {
-        _ = RefreshAuthAsync();
-    }
-
-    private async Task RefreshAuthAsync()
-    {
-        IsAuthenticated = await AuthService.IsAuthenticatedAsync();
+        _initialized = true;
+        _isAuthenticated = await AuthService.IsAuthenticatedAsync();
         await InvokeAsync(StateHasChanged);
     }
 
-    private async Task LogoutAsync()
+    private async void HandleAuthStateChanged()
     {
-        await GameService.DisconnectAsync();
-        await AuthService.ClearTokenAsync();
-        Navigation.NavigateTo("/", forceLoad: false);
+        _isAuthenticated = await AuthService.IsAuthenticatedAsync();
+        await InvokeAsync(StateHasChanged);
     }
 
     public void Dispose()
     {
-        AuthService.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+        AuthService.OnAuthStateChanged -= HandleAuthStateChanged;
     }
 }

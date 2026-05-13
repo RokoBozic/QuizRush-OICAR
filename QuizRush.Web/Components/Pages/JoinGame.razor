@@ -1,5 +1,6 @@
 @page "/join"
 @rendermode InteractiveServer
+@using QuizRush.Core.ViewModels
 @using QuizRush.Web.Services
 @inject GameService GameService
 @inject NavigationManager Navigation
@@ -16,13 +17,15 @@
 
 @if (!string.IsNullOrWhiteSpace(StatusMessage))
 {
-    <div class="alert alert-info">@StatusMessage</div>
+    <div class="alert @(IsError ? "alert-danger" : "alert-info") mt-3">@StatusMessage</div>
 }
 
 @code {
     private string SessionCode { get; set; } = string.Empty;
     private string PlayerName { get; set; } = string.Empty;
     private string StatusMessage { get; set; } = string.Empty;
+    private bool IsError { get; set; }
+    private bool _navigated;
 
     protected override void OnInitialized()
     {
@@ -44,23 +47,38 @@
 
     private async Task HandleJoinGame()
     {
+        IsError = false;
+        StatusMessage = string.Empty;
+
         if (string.IsNullOrWhiteSpace(SessionCode) || string.IsNullOrWhiteSpace(PlayerName))
         {
+            IsError = true;
             StatusMessage = "PIN code and player name are required.";
             return;
         }
 
-        await GameService.JoinGame(SessionCode, PlayerName);
+        StatusMessage = "Joining...";
+        try
+        {
+            await GameService.JoinGame(SessionCode, PlayerName);
+        }
+        catch (Exception ex)
+        {
+            IsError = true;
+            StatusMessage = $"Could not join: {ex.Message}";
+        }
     }
 
     private void HandleGameJoined(string sessionCode, int totalPlayers, string hostName)
     {
-        var name = Uri.EscapeDataString(PlayerName.Trim());
-        Navigation.NavigateTo($"/play/{sessionCode}?name={name}", replace: false);
+        if (_navigated) return;
+        _navigated = true;
+        Navigation.NavigateTo($"/play/{sessionCode}?name={Uri.EscapeDataString(PlayerName)}");
     }
 
     private void HandleError(string message)
     {
+        IsError = true;
         StatusMessage = message;
         InvokeAsync(StateHasChanged);
     }

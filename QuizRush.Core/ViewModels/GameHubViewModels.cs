@@ -20,6 +20,9 @@ namespace QuizRush.Core.ViewModels
         public long AnswerId { get; set; }
         public string Text { get; set; } = string.Empty;
         public bool IsCorrect { get; set; }
+        public int BasePoints { get; set; }
+        public int GamblingBonus { get; set; }
+        public int TotalPoints { get; set; }
     }
 
     public class LeaderboardData

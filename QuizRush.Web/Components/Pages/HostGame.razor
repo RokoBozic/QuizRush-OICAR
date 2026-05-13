@@ -1,6 +1,5 @@
 @page "/host"
 @using System.Net.Http.Json
-@using System.Timers
 @using QuizRush.Core.ViewModels
 @using QuizRush.Web.Services
 @inject HttpClient Http
@@ -8,7 +7,6 @@
 @inject GameService GameService
 @inject NavigationManager Navigation
 @inject IJSRuntime Js
-@implements IDisposable
 
 <PageTitle>Host Game</PageTitle>
 
@@ -29,16 +27,9 @@ else
 {
     <HostQuizSelector Quizzes="Quizzes" SelectedQuizChanged="OnSelectedQuizChanged" />
 
-    <div class="d-flex gap-2 mb-3 flex-wrap">
-        <button class="btn btn-primary" @onclick="CreateSession" disabled="@(!SelectedQuizId.HasValue || HasActiveSession)">Host Selected Quiz</button>
-        <button class="btn btn-success" @onclick="StartGame" disabled="@string.IsNullOrWhiteSpace(SessionCode)">Start Game</button>
-        <button class="btn btn-outline-primary" @onclick="NextQuestion" disabled="@string.IsNullOrWhiteSpace(SessionCode) || !GameLive">Next Question</button>
-        <button class="btn btn-danger" @onclick="EndGame" disabled="@string.IsNullOrWhiteSpace(SessionCode)">End Game</button>
+    <div class="mb-3">
+        <button class="btn btn-primary" @onclick="HostQuiz" disabled="@(!SelectedQuizId.HasValue)">Host Quiz</button>
     </div>
-
-    <HostWaitingRoom SessionCode="@SessionCode" PlayerCount="@PlayerCount" Players="Players" />
-    <HostQuestionDisplay Question="CurrentQuestion" AnsweredCount="@AnsweredCount" TotalPlayers="@PlayerCount" SecondsRemaining="@CurrentTimer" />
-    <HostLeaderboard Items="Leaderboard" />
 }
 
 @if (!string.IsNullOrWhiteSpace(StatusMessage))
@@ -50,18 +41,21 @@ else
     private List<QuizResponseViewModel> Quizzes { get; set; } = [];
     private long? SelectedQuizId { get; set; }
     private bool IsAuthenticated { get; set; }
-    private string SessionCode { get; set; } = string.Empty;
-    private int PlayerCount { get; set; }
-    private int AnsweredCount { get; set; }
-    private int CurrentTimer { get; set; }
     private string StatusMessage { get; set; } = string.Empty;
-    private QuestionData? CurrentQuestion { get; set; }
-    private LeaderboardData[] Leaderboard { get; set; } = Array.Empty<LeaderboardData>();
-    private List<string> Players { get; } = [];
-    private System.Timers.Timer? _countdownTimer;
     private bool _clientInitialized;
-    private bool GameLive { get; set; }
-    private bool HasActiveSession => !string.IsNullOrWhiteSpace(SessionCode);
+    private bool _eventSubscribed;
+
+    protected override void OnInitialized()
+    {
+        if (!_eventSubscribed)
+        {
+            GameService.OnGameJoined += (sessionCode, _, _) =>
+            {
+                Navigation.NavigateTo($"/host/{sessionCode}");
+            };
+            _eventSubscribed = true;
+        }
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -84,39 +78,14 @@ else
         var quizzes = await Http.GetFromJsonAsync<List<QuizResponseViewModel>>("api/quiz");
         Quizzes = quizzes ?? [];
 
-        GameService.OnPlayerJoined += HandlePlayerJoined;
-        GameService.OnQuestionReady += HandleQuestionReady;
-        GameService.OnScoresUpdated += HandleScoresUpdated;
-        GameService.OnGameEnded += HandleGameEnded;
-        GameService.OnGameJoined += HandleGameJoined;
-        GameService.OnGameError += HandleError;
-        GameService.OnGamblingPhaseStarted += HandleGamblingPhaseStarted;
-        GameService.OnGameStarted += HandleGameStarted;
-        GameService.OnHostSelfAck += HandleHostSelfAck;
-
-        // Try to rejoin existing session if host refreshed
         var storedSessionCode = await GetStoredSessionCodeAsync();
         if (!string.IsNullOrEmpty(storedSessionCode))
         {
-            try
-            {
-                await GameService.EnsureConnectedAsync();
-                await GameService.RejoinGame(storedSessionCode);
-            }
-            catch (Exception ex)
-            {
-                StatusMessage = $"Could not rejoin session: {ex.Message}";
-                await ClearStoredSessionCodeAsync();
-            }
+            Navigation.NavigateTo($"/host/{storedSessionCode}");
+            return;
         }
 
         await InvokeAsync(StateHasChanged);
-    }
-
-    private void HandleGamblingPhaseStarted(int seconds)
-    {
-        StatusMessage = $"Gambling phase — {seconds}s for players to set gamble.";
-        InvokeAsync(StateHasChanged);
     }
 
     private Task OnSelectedQuizChanged(long? quizId)
@@ -125,163 +94,23 @@ else
         return Task.CompletedTask;
     }
 
-    private async Task CreateSession()
+    private async Task HostQuiz()
     {
         if (!SelectedQuizId.HasValue)
         {
             return;
         }
 
-        await GameService.HostGame(SelectedQuizId.Value);
-    }
-
-    /// <summary>
-    /// Run long hub invocations off the Blazor synchronization context so incoming hub callbacks
-    /// (GameStarted, GamblingPhaseStarted, etc.) can be delivered without a deadlock.
-    /// </summary>
-    private async Task RunHubInvokeAsync(Func<Task> invoke)
-    {
         try
         {
-            await Task.Run(invoke).ConfigureAwait(false);
+            StatusMessage = string.Empty;
+            await GameService.EnsureConnectedAsync();
+            await GameService.HostGame(SelectedQuizId.Value);
         }
         catch (Exception ex)
         {
-            await InvokeAsync(() =>
-            {
-                StatusMessage = ex.GetBaseException().Message;
-            }).ConfigureAwait(false);
+            StatusMessage = $"Error starting game: {ex.Message}";
         }
-
-        await InvokeAsync(StateHasChanged).ConfigureAwait(false);
-    }
-
-    private Task StartGame() => RunHubInvokeAsync(() => GameService.StartGame(SessionCode));
-
-    private Task NextQuestion() => RunHubInvokeAsync(() => GameService.NextQuestion(SessionCode));
-
-    private Task EndGame() => RunHubInvokeAsync(() => GameService.EndGame(SessionCode));
-
-    private void HandleGameJoined(string sessionCode, int totalPlayers, string hostName)
-    {
-        SessionCode = sessionCode.Trim().ToUpperInvariant();
-        PlayerCount = totalPlayers;
-        GameLive = false;
-        StatusMessage = $"Hosting session {sessionCode} as {hostName}.";
-        _ = SaveSessionCodeAsync(SessionCode);
-        InvokeAsync(StateHasChanged);
-    }
-
-    private void HandleGameStarted(int questionCount)
-    {
-        GameLive = true;
-        StatusMessage = $"Game started — {questionCount} question(s).";
-        InvokeAsync(StateHasChanged);
-    }
-
-    private void HandleHostSelfAck(string message)
-    {
-        StatusMessage = message;
-        InvokeAsync(StateHasChanged);
-    }
-
-    private void HandlePlayerJoined(string playerName, int totalPlayers)
-    {
-        PlayerCount = totalPlayers;
-        if (!Players.Contains(playerName))
-        {
-            Players.Add(playerName);
-        }
-
-        InvokeAsync(StateHasChanged);
-    }
-
-    private void HandleQuestionReady(QuestionData question, int timeLimit)
-    {
-        CurrentQuestion = question;
-        CurrentTimer = timeLimit;
-        AnsweredCount = 0;
-        StartCountdown();
-        InvokeAsync(StateHasChanged);
-    }
-
-    private void StartCountdown()
-    {
-        StopCountdown();
-        _countdownTimer = new System.Timers.Timer(1000);
-        _countdownTimer.Elapsed += OnCountdownTick;
-        _countdownTimer.AutoReset = true;
-        _countdownTimer.Start();
-    }
-
-    private void StopCountdown()
-    {
-        if (_countdownTimer != null)
-        {
-            _countdownTimer.Stop();
-            _countdownTimer.Elapsed -= OnCountdownTick;
-            _countdownTimer.Dispose();
-            _countdownTimer = null;
-        }
-    }
-
-    private void OnCountdownTick(object? sender, ElapsedEventArgs e)
-    {
-        if (CurrentTimer > 0)
-        {
-            CurrentTimer--;
-            InvokeAsync(StateHasChanged);
-        }
-        if (CurrentTimer <= 0)
-        {
-            StopCountdown();
-        }
-    }
-
-    private void HandleScoresUpdated(LeaderboardData[] scores)
-    {
-        Leaderboard = scores;
-        InvokeAsync(StateHasChanged);
-    }
-
-    private void HandleGameEnded(LeaderboardData[] finalScores)
-    {
-        Leaderboard = finalScores;
-        SessionCode = string.Empty;
-        GameLive = false;
-        PlayerCount = 0;
-        Players.Clear();
-        CurrentQuestion = null;
-        AnsweredCount = 0;
-        StopCountdown();
-        StatusMessage = "Game ended. You can host a new quiz when you are ready.";
-        _ = ClearStoredSessionCodeAsync();
-        InvokeAsync(StateHasChanged);
-    }
-
-    private void HandleError(string error)
-    {
-        StatusMessage = error;
-        if (ShouldClearGameLiveAfterHubError(error))
-        {
-            GameLive = false;
-        }
-
-        InvokeAsync(StateHasChanged);
-    }
-
-    /// <summary>
-    /// Server may reset <c>GameLive</c> after a failed start while the client already received <c>GameStarted</c>.
-    /// </summary>
-    private static bool ShouldClearGameLiveAfterHubError(string error)
-    {
-        if (string.IsNullOrWhiteSpace(error))
-        {
-            return false;
-        }
-
-        return error.Contains("Could not start", StringComparison.OrdinalIgnoreCase)
-            || error.Contains("Session not found", StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task<string?> GetStoredSessionCodeAsync()
@@ -296,41 +125,7 @@ else
         }
     }
 
-    private async Task SaveSessionCodeAsync(string sessionCode)
-    {
-        try
-        {
-            await Js.InvokeAsync<object>("localStorage.setItem", "hostSessionCode", sessionCode);
-        }
-        catch
-        {
-            // Silent fail - localStorage not available
-        }
-    }
-
-    private async Task ClearStoredSessionCodeAsync()
-    {
-        try
-        {
-            await Js.InvokeAsync<object>("localStorage.removeItem", "hostSessionCode");
-        }
-        catch
-        {
-            // Silent fail
-        }
-    }
-
     public void Dispose()
     {
-        StopCountdown();
-        GameService.OnPlayerJoined -= HandlePlayerJoined;
-        GameService.OnQuestionReady -= HandleQuestionReady;
-        GameService.OnScoresUpdated -= HandleScoresUpdated;
-        GameService.OnGameEnded -= HandleGameEnded;
-        GameService.OnGameJoined -= HandleGameJoined;
-        GameService.OnGameError -= HandleError;
-        GameService.OnGamblingPhaseStarted -= HandleGamblingPhaseStarted;
-        GameService.OnGameStarted -= HandleGameStarted;
-        GameService.OnHostSelfAck -= HandleHostSelfAck;
     }
 }

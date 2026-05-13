@@ -26,6 +26,11 @@ namespace QuizRush.Web.Services
 
         public event Action<string>? OnHostPlayerNotice;
 
+        public event Action<int, int>? OnQuestionAnswered;
+        public event Action? OnSubmissionPhaseEnded;
+        public event Action? OnAllPlayersAnswered;
+        public event Action<int, int>? OnQuestionDisplayed;
+
         public bool IsConnected => _hubConnection?.State == HubConnectionState.Connected;
         private HubConnection Hub => _hubConnection ?? throw new InvalidOperationException("Hub connection not initialized.");
 
@@ -186,6 +191,26 @@ namespace QuizRush.Web.Services
             Hub.On<string>("HostPlayerNotice", message =>
             {
                 OnHostPlayerNotice?.Invoke(message);
+            });
+
+            Hub.On<int, int>("QuestionAnswered", (answered, total) =>
+            {
+                OnQuestionAnswered?.Invoke(answered, total);
+            });
+
+            Hub.On("SubmissionPhaseEnded", () =>
+            {
+                OnSubmissionPhaseEnded?.Invoke();
+            });
+
+            Hub.On("AllPlayersAnswered", () =>
+            {
+                OnAllPlayersAnswered?.Invoke();
+            });
+
+            Hub.On<int, int>("QuestionDisplayed", (questionNumber, timeLimit) =>
+            {
+                OnQuestionDisplayed?.Invoke(questionNumber, timeLimit);
             });
         }
     }

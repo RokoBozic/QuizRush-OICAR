@@ -10,13 +10,15 @@ namespace QuizRush.Web.Services
         private readonly LocalStorageService _localStorage;
         private const string TokenKey = "token";
 
-        public event Action? AuthenticationStateChanged;
+        public event Action? OnAuthStateChanged;
 
         public AuthService(HttpClient httpClient, LocalStorageService localStorage)
         {
             _httpClient = httpClient;
             _localStorage = localStorage;
         }
+
+        private void RaiseStateChanged() => OnAuthStateChanged?.Invoke();
 
         public async Task<AuthResponseViewModel?> LoginAsync(string email, string password)
         {
@@ -36,6 +38,7 @@ namespace QuizRush.Web.Services
             if (auth != null && !string.IsNullOrWhiteSpace(auth.Token))
             {
                 await SaveTokenAsync(auth.Token);
+                RaiseStateChanged();
             }
 
             return auth;
@@ -64,16 +67,21 @@ namespace QuizRush.Web.Services
             return _localStorage.GetItemAsync(TokenKey);
         }
 
-        public async Task SaveTokenAsync(string token)
+        public Task SaveTokenAsync(string token)
         {
-            await _localStorage.SetItemAsync(TokenKey, token);
-            AuthenticationStateChanged?.Invoke();
+            return _localStorage.SetItemAsync(TokenKey, token);
         }
 
-        public async Task ClearTokenAsync()
+        public Task ClearTokenAsync()
         {
-            await _localStorage.RemoveItemAsync(TokenKey);
-            AuthenticationStateChanged?.Invoke();
+            return _localStorage.RemoveItemAsync(TokenKey);
+        }
+
+        public async Task LogoutAsync()
+        {
+            await ClearTokenAsync();
+            _httpClient.DefaultRequestHeaders.Authorization = null;
+            RaiseStateChanged();
         }
 
         public async Task<bool> IsAuthenticatedAsync()
