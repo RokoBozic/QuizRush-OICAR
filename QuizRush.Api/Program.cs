@@ -67,7 +67,10 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowBlazor", policy =>
     {
-        policy.WithOrigins(blazorOrigins)
+        var configuredOrigins = new HashSet<string>(blazorOrigins, StringComparer.OrdinalIgnoreCase);
+        policy.SetIsOriginAllowed(origin =>
+              IsLocalDevOrigin(origin)
+              || configuredOrigins.Contains(origin))
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials();
@@ -149,3 +152,14 @@ app.MapControllers();
 app.MapHub<GameHub>("/hub/game");
 
 app.Run();
+
+static bool IsLocalDevOrigin(string? origin)
+{
+    if (string.IsNullOrWhiteSpace(origin) || !Uri.TryCreate(origin, UriKind.Absolute, out var uri))
+    {
+        return false;
+    }
+
+    return uri.Scheme is "http" or "https"
+        && (uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) || uri.Host == "127.0.0.1");
+}

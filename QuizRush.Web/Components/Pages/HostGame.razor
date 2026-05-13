@@ -87,8 +87,16 @@ else
         }
 
         await AuthService.ApplyAuthorizationHeaderAsync(Http);
-        var quizzes = await Http.GetFromJsonAsync<List<QuizResponseViewModel>>("api/quiz");
-        Quizzes = quizzes ?? [];
+        try
+        {
+            var quizzes = await Http.GetFromJsonAsync<List<QuizResponseViewModel>>("api/quiz");
+            Quizzes = quizzes ?? [];
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = $"Could not load quizzes from API. Check that QuizRush.Api is running and reachable at the configured base URL. Details: {ex.GetBaseException().Message}";
+            Quizzes = [];
+        }
 
         StoredSessionCode = await GetStoredSessionCodeAsync();
 
