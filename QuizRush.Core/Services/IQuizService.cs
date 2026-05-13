@@ -5,10 +5,10 @@ namespace QuizRush.Core.Services
 {
     public interface IQuizService
     {
-        Task<IEnumerable<Quiz>> GetAllAsync();
-        Task<Quiz?> GetByIdAsync(long id);
+        Task<IEnumerable<Quiz>> GetAllForCreatorAsync(long creatorId);
+        Task<Quiz?> GetByIdForCreatorAsync(long id, long creatorId);
         Task<Quiz> CreateAsync(QuizViewModel model, long creatorId);
-        Task UpdateAsync(long id, QuizViewModel model);
-        Task DeleteAsync(long id);
+        Task UpdateAsync(long id, QuizViewModel model, long actingUserId);
+        Task DeleteAsync(long id, long actingUserId);
     }
 }

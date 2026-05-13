@@ -32,4 +32,21 @@ namespace QuizRush.Core.ViewModels
         [MinLength(8)]
         public string NewPassword { get; set; } = string.Empty;
     }
+
+    public class PlayerGameHistoryItemViewModel
+    {
+        public string SessionCode { get; set; } = string.Empty;
+        public DateTime Date { get; set; }
+        public int Score { get; set; }
+        public int Rank { get; set; }
+    }
+
+    public class PlayerStatsViewModel
+    {
+        public int AccumulatedPoints { get; set; }
+        public int GamesPlayed { get; set; }
+        public int GamesWon { get; set; }
+        public int HighestScore { get; set; }
+        public List<PlayerGameHistoryItemViewModel> GameHistory { get; set; } = new();
+    }
 }

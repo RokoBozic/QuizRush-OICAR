@@ -37,6 +37,19 @@ namespace QuizRush.Api.Controllers
             return Ok(profile);
         }
 
+        /// <summary>Player statistics and completed game history.</summary>
+        [ProducesResponseType(typeof(PlayerStatsViewModel), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+        [HttpGet("stats")]
+        public async Task<ActionResult<PlayerStatsViewModel>> GetPlayerStats()
+        {
+            if (!TryGetUserId(out long userId))
+                return Unauthorized();
+
+            var stats = await _userService.GetPlayerStatsAsync(userId);
+            return Ok(stats);
+        }
+
         /// <summary>Updates the username and email of the currently authenticated user.</summary>
         /// <response code="204">Profile updated successfully.</response>
         /// <response code="400">Username or email already taken.</response>

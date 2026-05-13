@@ -1,17 +1,31 @@
+using System.Text.Json.Serialization;
+
 namespace QuizRush.Core.ViewModels
 {
     public class QuestionData
     {
+        [JsonPropertyName("questionId")]
         public long QuestionId { get; set; }
+
+        [JsonPropertyName("text")]
         public string Text { get; set; } = string.Empty;
+
+        [JsonPropertyName("pointsValue")]
         public int PointsValue { get; set; }
+
+        [JsonPropertyName("timeLimit")]
         public int TimeLimit { get; set; }
+
+        [JsonPropertyName("answers")]
         public List<AnswerOptionData> Answers { get; set; } = new();
     }
 
     public class AnswerOptionData
     {
+        [JsonPropertyName("answerId")]
         public long AnswerId { get; set; }
+
+        [JsonPropertyName("text")]
         public string Text { get; set; } = string.Empty;
     }
 

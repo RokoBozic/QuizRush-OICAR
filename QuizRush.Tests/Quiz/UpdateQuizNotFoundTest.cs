@@ -34,7 +34,7 @@ namespace QuizRush.Tests.Quiz
             };
 
             await Assert.ThrowsAsync<KeyNotFoundException>(() =>
-                service.UpdateAsync(999, model));
+                service.UpdateAsync(999, model, actingUserId: 1));
         }
     }
 }

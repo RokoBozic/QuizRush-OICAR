@@ -23,6 +23,9 @@ namespace QuizRush.Infrastructure.Services
             if (quiz == null)
                 throw new KeyNotFoundException($"Quiz with id {quizId} not found.");
 
+            if (quiz.CreatorId != hostUserId)
+                throw new UnauthorizedAccessException("You can only host games using quizzes you created.");
+
             string code = await GenerateUniqueCodeAsync();
 
             var session = new GameSession

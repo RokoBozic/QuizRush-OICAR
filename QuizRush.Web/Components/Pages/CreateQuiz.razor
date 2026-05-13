@@ -165,10 +165,14 @@ else
 
         _clientReady = true;
         _isAuthenticated = await AuthService.IsAuthenticatedAsync();
-        if (_isAuthenticated)
+        if (!_isAuthenticated)
         {
-            await AuthService.ApplyAuthorizationHeaderAsync(Http);
+            Navigation.NavigateTo("/login", replace: true);
+            await InvokeAsync(StateHasChanged);
+            return;
         }
+
+        await AuthService.ApplyAuthorizationHeaderAsync(Http);
 
         await InvokeAsync(StateHasChanged);
     }

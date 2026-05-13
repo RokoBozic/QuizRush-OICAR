@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Configuration;
 using QuizRush.Core.ViewModels;
+using System.Text.Json;
 
 namespace QuizRush.Web.Services
 {
@@ -75,6 +76,11 @@ namespace QuizRush.Web.Services
                     .WithUrl(_hubUrl, options =>
                     {
                         options.AccessTokenProvider = async () => await _authService.GetStoredTokenAsync();
+                    })
+                    .AddJsonProtocol(o =>
+                    {
+                        o.PayloadSerializerOptions.PropertyNameCaseInsensitive = true;
+                        o.PayloadSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
                     })
                     .WithAutomaticReconnect()
                     .Build();

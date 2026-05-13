@@ -59,9 +59,9 @@ namespace QuizRush.Tests.Quiz
                 }
             };
 
-            await service.UpdateAsync(created.Id, updateModel);
+            await service.UpdateAsync(created.Id, updateModel, actingUserId: 1);
 
-            var updated = await service.GetByIdAsync(created.Id);
+            var updated = await service.GetByIdForCreatorAsync(created.Id, 1);
             Assert.Equal("Updated Title", updated!.Title);
             Assert.Equal("Updated question?", updated.Questions.First().Text);
         }

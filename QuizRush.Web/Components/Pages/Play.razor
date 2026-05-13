@@ -61,14 +61,40 @@ else
     </div>
     <p class="text-muted">Playing as <strong>@PlayerName</strong></p>
 
-    @if (CurrentQuestion == null && LastAnswer == null)
+    @if (!ShowGamblingPhase && CurrentQuestion == null && LastAnswer == null && !WaitingAfterRound)
     {
         <PlayerWaitingRoom />
     }
 
-    @if (CurrentQuestion != null && LastAnswer == null)
+    @if (ShowGamblingPhase && GamblingSecondsRemaining > 0)
+    {
+        <div class="card mb-3 border-warning">
+            <div class="card-header bg-warning">
+                <strong>Gamble before the next question</strong>
+                <span class="float-end badge bg-dark">@GamblingSecondsRemaining s</span>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">Choose how much of your current score to risk on the upcoming question.</p>
+                <PlayerGamblingWidget OnSelect="PlaceGamble" />
+            </div>
+        </div>
+    }
+
+    @* Show answers whenever we have a live question from the server. Do not gate on ShowGamblingPhase — the client
+       countdown can hit zero before QuestionReady, leaving ShowGamblingPhase true and hiding the question entirely. *@
+    @if (CurrentQuestion != null && LastAnswer == null && !WaitingAfterRound)
     {
         <PlayerQuestionDisplay Question="CurrentQuestion" SecondsRemaining="@CurrentTimer" OnAnswerSubmit="SubmitAnswer" />
+    }
+
+    @if (WaitingAfterRound && LastAnswer == null)
+    {
+        <div class="card mb-3 border-secondary">
+            <div class="card-body text-center">
+                <h5 class="text-muted">Round closed</h5>
+                <p class="mb-0">Time ran out or the host moved on. Next question loads in a moment.</p>
+            </div>
+        </div>
     }
 
     @if (LastAnswer != null)
@@ -101,11 +127,6 @@ else
         </div>
     }
 
-    @if (CurrentQuestion != null && !ShowGamblingPhase && LastAnswer == null)
-    {
-        <PlayerGamblingWidget OnSelect="PlaceGamble" />
-    }
-
     <PlayerLeaderboard Items="Leaderboard" CurrentPlayerName="@PlayerName" />
 
     @if (!string.IsNullOrWhiteSpace(StatusMessage))
@@ -128,7 +149,10 @@ else
     private LeaderboardData[] Leaderboard { get; set; } = Array.Empty<LeaderboardData>();
     private AnswerData? LastAnswer { get; set; }
     private System.Timers.Timer? _countdownTimer;
+    private System.Timers.Timer? _gamblingCountdownTimer;
     private bool ShowGamblingPhase { get; set; }
+    private int GamblingSecondsRemaining { get; set; }
+    private bool WaitingAfterRound { get; set; }
     private bool GameOver { get; set; }
     private int MyFinalScore { get; set; }
     private int MyRank { get; set; }
@@ -146,12 +170,14 @@ else
         GameService.OnGamblingPhaseStarted += HandleGamblingPhaseStarted;
         GameService.OnGameStarted += HandleGameStarted;
         GameService.OnQuestionDisplayed += HandleQuestionDisplayed;
+        GameService.OnSubmissionPhaseEnded += HandleSubmissionPhaseEnded;
     }
 
     private void HandleGameStarted(int questionCount)
     {
         TotalQuestions = questionCount;
         CurrentQuestionNumber = 0;
+        WaitingAfterRound = false;
         InvokeAsync(StateHasChanged);
     }
 
@@ -170,13 +196,9 @@ else
 
         _joinDispatched = true;
 
-        if (GameService.IsConnected)
-        {
-            return;
-        }
-
         try
         {
+            await GameService.EnsureConnectedAsync();
             await GameService.JoinGame(SessionCode, PlayerName.Trim());
         }
         catch (Exception ex)
@@ -189,7 +211,68 @@ else
 
     private void HandleGamblingPhaseStarted(int secondsRemaining)
     {
+        if (secondsRemaining <= 0)
+        {
+            ShowGamblingPhase = false;
+            StopGamblingCountdown();
+            InvokeAsync(StateHasChanged);
+            return;
+        }
+
         ShowGamblingPhase = true;
+        GamblingSecondsRemaining = secondsRemaining;
+        LastAnswer = null;
+        CurrentQuestion = null;
+        WaitingAfterRound = false;
+        StopCountdown();
+        StartGamblingCountdown();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void StartGamblingCountdown()
+    {
+        StopGamblingCountdown();
+        _gamblingCountdownTimer = new System.Timers.Timer(1000);
+        _gamblingCountdownTimer.Elapsed += OnGamblingCountdownTick;
+        _gamblingCountdownTimer.AutoReset = true;
+        _gamblingCountdownTimer.Start();
+    }
+
+    private void StopGamblingCountdown()
+    {
+        if (_gamblingCountdownTimer != null)
+        {
+            _gamblingCountdownTimer.Stop();
+            _gamblingCountdownTimer.Elapsed -= OnGamblingCountdownTick;
+            _gamblingCountdownTimer.Dispose();
+            _gamblingCountdownTimer = null;
+        }
+    }
+
+    private void OnGamblingCountdownTick(object? sender, ElapsedEventArgs e)
+    {
+        if (GamblingSecondsRemaining > 0)
+        {
+            GamblingSecondsRemaining--;
+            InvokeAsync(StateHasChanged);
+        }
+
+        if (GamblingSecondsRemaining <= 0)
+        {
+            StopGamblingCountdown();
+            ShowGamblingPhase = false;
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void HandleSubmissionPhaseEnded()
+    {
+        if (LastAnswer == null && CurrentQuestion != null)
+        {
+            WaitingAfterRound = true;
+            StopCountdown();
+        }
+
         InvokeAsync(StateHasChanged);
     }
 
@@ -207,6 +290,8 @@ else
     private void HandleQuestionReady(QuestionData question, int timeLimit)
     {
         ShowGamblingPhase = false;
+        StopGamblingCountdown();
+        WaitingAfterRound = false;
         CurrentQuestion = question;
         CurrentTimer = timeLimit;
         LastAnswer = null;
@@ -219,6 +304,7 @@ else
     {
         LastAnswer = answer;
         StopCountdown();
+        StopGamblingCountdown();
         InvokeAsync(StateHasChanged);
     }
 
@@ -233,6 +319,8 @@ else
         Leaderboard = finalScores;
         GameOver = true;
         StopCountdown();
+        StopGamblingCountdown();
+        ShowGamblingPhase = false;
 
         var myEntry = finalScores.FirstOrDefault(s =>
             string.Equals(s.PlayerName, PlayerName, StringComparison.OrdinalIgnoreCase));
@@ -288,6 +376,7 @@ else
     public void Dispose()
     {
         StopCountdown();
+        StopGamblingCountdown();
         GameService.OnQuestionReady -= HandleQuestionReady;
         GameService.OnAnswerRevealed -= HandleAnswerRevealed;
         GameService.OnScoresUpdated -= HandleScoresUpdated;
@@ -296,5 +385,6 @@ else
         GameService.OnGamblingPhaseStarted -= HandleGamblingPhaseStarted;
         GameService.OnGameStarted -= HandleGameStarted;
         GameService.OnQuestionDisplayed -= HandleQuestionDisplayed;
+        GameService.OnSubmissionPhaseEnded -= HandleSubmissionPhaseEnded;
     }
 }

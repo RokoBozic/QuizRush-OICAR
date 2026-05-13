@@ -7,6 +7,7 @@
 @inject GameService GameService
 @inject NavigationManager Navigation
 @inject IJSRuntime Js
+@implements IDisposable
 
 <PageTitle>Host Game</PageTitle>
 
@@ -43,18 +44,17 @@ else
     private bool IsAuthenticated { get; set; }
     private string StatusMessage { get; set; } = string.Empty;
     private bool _clientInitialized;
-    private bool _eventSubscribed;
 
     protected override void OnInitialized()
     {
-        if (!_eventSubscribed)
-        {
-            GameService.OnGameJoined += (sessionCode, _, _) =>
-            {
-                Navigation.NavigateTo($"/host/{sessionCode}");
-            };
-            _eventSubscribed = true;
-        }
+        // Must unsubscribe in Dispose: same GameService is used when joining as a player on /join,
+        // and the hub also raises GameJoined there — a stale handler would navigate to /host and show the host UI.
+        GameService.OnGameJoined += OnHostSessionCreated;
+    }
+
+    private void OnHostSessionCreated(string sessionCode, int totalPlayers, string hostName)
+    {
+        _ = InvokeAsync(() => Navigation.NavigateTo($"/host/{sessionCode}"));
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -127,5 +127,6 @@ else
 
     public void Dispose()
     {
+        GameService.OnGameJoined -= OnHostSessionCreated;
     }
 }

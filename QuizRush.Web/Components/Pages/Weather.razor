@@ -1,18 +1,23 @@
 ﻿@page "/weather"
-@attribute [StreamRendering]
+@rendermode InteractiveServer
+@using QuizRush.Web.Services
+@inject AuthService AuthService
+@inject NavigationManager Navigation
 
 <PageTitle>Weather</PageTitle>
 
-<h1>Weather</h1>
-
-<p>This component demonstrates showing data.</p>
-
-@if (forecasts == null)
+@if (!_ready)
+{
+    <p class="text-muted">Loading…</p>
+}
+else if (forecasts == null)
 {
     <p><em>Loading...</em></p>
 }
 else
 {
+    <h1>Weather</h1>
+    <p>This component demonstrates showing data.</p>
     <table class="table">
         <thead>
             <tr>
@@ -37,11 +42,29 @@ else
 }
 
 @code {
+    private bool _ready;
     private WeatherForecast[]? forecasts;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // Simulate asynchronous loading to demonstrate streaming rendering
+        if (!firstRender || _ready)
+        {
+            return;
+        }
+
+        _ready = true;
+        if (!await AuthService.IsAuthenticatedAsync())
+        {
+            Navigation.NavigateTo("/login", replace: true);
+            return;
+        }
+
+        await LoadForecastsAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadForecastsAsync()
+    {
         await Task.Delay(500);
 
         var startDate = DateOnly.FromDateTime(DateTime.Now);

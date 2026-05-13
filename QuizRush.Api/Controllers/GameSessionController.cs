@@ -44,6 +44,10 @@ namespace QuizRush.Api.Controllers
             {
                 return NotFound(ex.Message);
             }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, ex.Message);
+            }
         }
 
         /// <summary>Returns a game session by its PIN code.</summary>

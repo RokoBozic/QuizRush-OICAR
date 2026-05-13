@@ -1,12 +1,44 @@
 ﻿@page "/"
+@rendermode InteractiveServer
+@using QuizRush.Web.Services
+@inject AuthService AuthService
+@inject NavigationManager Navigation
 
 <PageTitle>QuizRush</PageTitle>
 
-<h1>QuizRush</h1>
+@if (!_ready)
+{
+    <p class="text-muted">Loading…</p>
+}
+else if (_isAuthenticated)
+{
+    <h1>QuizRush</h1>
+    <p class="lead">Real-time quiz gameplay with host control and live leaderboards.</p>
+    <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-primary" href="/join">Join Game</a>
+        <a class="btn btn-outline-primary" href="/host">Host Game</a>
+    </div>
+}
 
-<p class="lead">Real-time quiz gameplay with host control and live leaderboards.</p>
+@code {
+    private bool _ready;
+    private bool _isAuthenticated;
 
-<div class="d-flex gap-2">
-    <a class="btn btn-primary" href="/join">Join Game</a>
-    <a class="btn btn-outline-primary" href="/host">Host Game</a>
-</div>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _ready)
+        {
+            return;
+        }
+
+        _ready = true;
+        _isAuthenticated = await AuthService.IsAuthenticatedAsync();
+        if (!_isAuthenticated)
+        {
+            Navigation.NavigateTo("/join", replace: true);
+            return;
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+}

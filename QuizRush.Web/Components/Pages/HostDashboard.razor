@@ -148,6 +148,7 @@ else
         _isAuthenticated = await AuthService.IsAuthenticatedAsync();
         if (!_isAuthenticated)
         {
+            Navigation.NavigateTo("/login", replace: true);
             await InvokeAsync(StateHasChanged);
             return;
         }

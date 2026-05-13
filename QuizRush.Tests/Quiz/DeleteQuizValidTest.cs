@@ -35,9 +35,9 @@ namespace QuizRush.Tests.Quiz
 
             var created = await service.CreateAsync(model, creatorId: 1);
 
-            await service.DeleteAsync(created.Id);
+            await service.DeleteAsync(created.Id, actingUserId: 1);
 
-            var result = await service.GetByIdAsync(created.Id);
+            var result = await service.GetByIdForCreatorAsync(created.Id, 1);
             Assert.Null(result);
         }
     }

@@ -9,6 +9,7 @@ namespace QuizRush.Api.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class QuizController : ControllerBase
     {
         private readonly IQuizService _quizService;
@@ -18,47 +19,42 @@ namespace QuizRush.Api.Controllers
             _quizService = quizService;
         }
 
-        /// <summary>Returns all quizzes including their questions and answers.</summary>
-        /// <response code="200">List of quizzes returned.</response>
+        /// <summary>Returns quizzes created by the current user.</summary>
         [ProducesResponseType(typeof(IEnumerable<QuizResponseViewModel>), StatusCodes.Status200OK)]
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<QuizResponseViewModel>>> GetAll()
+        public async Task<ActionResult<IEnumerable<QuizResponseViewModel>>> GetMine()
         {
-            var quizzes = await _quizService.GetAllAsync();
+            if (!TryGetUserId(out long userId))
+                return Unauthorized();
+
+            var quizzes = await _quizService.GetAllForCreatorAsync(userId);
             return Ok(quizzes.Select(MapQuiz));
         }
 
-        /// <summary>Returns a single quiz by ID.</summary>
-        /// <response code="200">Quiz found and returned.</response>
-        /// <response code="404">Quiz not found.</response>
+        /// <summary>Returns a single quiz by ID if it belongs to the current user.</summary>
         [ProducesResponseType(typeof(QuizResponseViewModel), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [HttpGet("{id}")]
         public async Task<ActionResult<QuizResponseViewModel>> GetById(long id)
         {
-            var quiz = await _quizService.GetByIdAsync(id);
+            if (!TryGetUserId(out long userId))
+                return Unauthorized();
+
+            var quiz = await _quizService.GetByIdForCreatorAsync(id, userId);
             if (quiz == null)
                 return NotFound();
 
             return Ok(MapQuiz(quiz));
         }
 
-        /// <summary>Creates a new quiz. Requires authentication.</summary>
-        /// <response code="201">Quiz created successfully.</response>
-        /// <response code="400">Validation error (missing questions, no correct answer, etc).</response>
-        /// <response code="401">Not authenticated.</response>
         [ProducesResponseType(typeof(QuizResponseViewModel), StatusCodes.Status201Created)]
         [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-        [Authorize]
         [HttpPost]
         public async Task<ActionResult<QuizResponseViewModel>> Create(QuizViewModel model)
         {
-            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (userIdClaim == null)
+            if (!TryGetUserId(out long creatorId))
                 return Unauthorized();
-
-            long creatorId = long.Parse(userIdClaim);
 
             try
             {
@@ -71,25 +67,28 @@ namespace QuizRush.Api.Controllers
             }
         }
 
-        /// <summary>Updates an existing quiz. Requires authentication.</summary>
-        /// <response code="204">Quiz updated successfully.</response>
-        /// <response code="400">Validation error.</response>
-        /// <response code="404">Quiz not found.</response>
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [Authorize]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
         [HttpPut("{id}")]
         public async Task<IActionResult> Update(long id, QuizViewModel model)
         {
+            if (!TryGetUserId(out long userId))
+                return Unauthorized();
+
             try
             {
-                await _quizService.UpdateAsync(id, model);
+                await _quizService.UpdateAsync(id, model, userId);
                 return NoContent();
             }
             catch (KeyNotFoundException)
             {
                 return NotFound();
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, ex.Message);
             }
             catch (ArgumentException ex)
             {
@@ -97,24 +96,35 @@ namespace QuizRush.Api.Controllers
             }
         }
 
-        /// <summary>Deletes a quiz by ID. Requires authentication.</summary>
-        /// <response code="204">Quiz deleted successfully.</response>
-        /// <response code="404">Quiz not found.</response>
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
-        [Authorize]
+        [ProducesResponseType(StatusCodes.Status403Forbidden)]
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(long id)
         {
+            if (!TryGetUserId(out long userId))
+                return Unauthorized();
+
             try
             {
-                await _quizService.DeleteAsync(id);
+                await _quizService.DeleteAsync(id, userId);
                 return NoContent();
             }
             catch (KeyNotFoundException)
             {
                 return NotFound();
             }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, ex.Message);
+            }
+        }
+
+        private bool TryGetUserId(out long userId)
+        {
+            userId = 0;
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            return long.TryParse(userIdClaim, out userId);
         }
 
         private static QuizResponseViewModel MapQuiz(Quiz quiz)
