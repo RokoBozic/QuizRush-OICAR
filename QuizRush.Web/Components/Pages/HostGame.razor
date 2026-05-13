@@ -38,11 +38,23 @@ else
     <div class="alert alert-info mt-3">@StatusMessage</div>
 }
 
+@if (!string.IsNullOrWhiteSpace(StoredSessionCode))
+{
+    <div class="alert alert-secondary mt-3 d-flex justify-content-between align-items-center">
+        <span>You have a saved host session: <strong>@StoredSessionCode</strong></span>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-sm btn-outline-primary" @onclick="ResumeStoredSession">Resume</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="ClearStoredSession">Dismiss</button>
+        </div>
+    </div>
+}
+
 @code {
     private List<QuizResponseViewModel> Quizzes { get; set; } = [];
     private long? SelectedQuizId { get; set; }
     private bool IsAuthenticated { get; set; }
     private string StatusMessage { get; set; } = string.Empty;
+    private string? StoredSessionCode { get; set; }
     private bool _clientInitialized;
 
     protected override void OnInitialized()
@@ -78,12 +90,7 @@ else
         var quizzes = await Http.GetFromJsonAsync<List<QuizResponseViewModel>>("api/quiz");
         Quizzes = quizzes ?? [];
 
-        var storedSessionCode = await GetStoredSessionCodeAsync();
-        if (!string.IsNullOrEmpty(storedSessionCode))
-        {
-            Navigation.NavigateTo($"/host/{storedSessionCode}");
-            return;
-        }
+        StoredSessionCode = await GetStoredSessionCodeAsync();
 
         await InvokeAsync(StateHasChanged);
     }
@@ -123,6 +130,28 @@ else
         {
             return null;
         }
+    }
+
+    private void ResumeStoredSession()
+    {
+        if (!string.IsNullOrWhiteSpace(StoredSessionCode))
+        {
+            Navigation.NavigateTo($"/host/{StoredSessionCode.Trim().ToUpperInvariant()}");
+        }
+    }
+
+    private async Task ClearStoredSession()
+    {
+        try
+        {
+            await Js.InvokeVoidAsync("localStorage.removeItem", "hostSessionCode");
+        }
+        catch
+        {
+            // Silent fail
+        }
+
+        StoredSessionCode = null;
     }
 
     public void Dispose()

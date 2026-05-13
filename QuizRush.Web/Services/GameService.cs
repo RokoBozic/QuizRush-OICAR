@@ -75,7 +75,7 @@ namespace QuizRush.Web.Services
                 _hubConnection = new HubConnectionBuilder()
                     .WithUrl(_hubUrl, options =>
                     {
-                        options.AccessTokenProvider = async () => await _authService.GetStoredTokenAsync();
+                        options.AccessTokenProvider = async () => await _authService.GetValidStoredTokenAsync();
                     })
                     .AddJsonProtocol(o =>
                     {
