@@ -6,7 +6,5 @@
   <Project Path="QuizRush.Core/QuizRush.Core.csproj" />
   <Project Path="QuizRush.Infrastructure/QuizRush.Infrastructure.csproj" />
   <Project Path="QuizRush.Tests/QuizRush.Tests.csproj" Id="7ec04f1f-a5e3-410e-8585-bf4e76b8fcec" />
-  <Project Path="QuizRush.Web/QuizRush.Web.csproj">
-    <Build Solution="Debug|*" Project="false" />
-  </Project>
+  <Project Path="QuizRush.Web/QuizRush.Web.csproj" />
 </Solution>
