@@ -74,7 +74,8 @@ else
                                             <br />
                                             <small class="text-muted">Created: @quiz.CreatedAt.ToString("MMM d, yyyy")</small>
                                         </div>
-                                        <div>
+                                        <div class="d-flex gap-1">
+                                            <a href="/quizzes/edit/@quiz.Id" class="btn btn-sm btn-outline-primary">Edit</a>
                                             <a href="/host?quizId=@quiz.Id" class="btn btn-sm btn-success">Host</a>
                                         </div>
                                     </div>
