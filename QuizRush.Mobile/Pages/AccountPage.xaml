@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="QuizRush.Mobile.Pages.AccountPage"
+             Title="Account"
+             BackgroundColor="#0B1020">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="20,18,20,28" Spacing="18">
+            <Border StrokeThickness="0"
+                    Background="#121A34"
+                    Padding="20">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="28" />
+                </Border.StrokeShape>
+                <VerticalStackLayout Spacing="12">
+                    <Image Source="quizrush_logo.png"
+                           HeightRequest="72"
+                           Aspect="AspectFit"
+                           HorizontalOptions="Center" />
+                    <Label Text="Your account hub"
+                           FontSize="28"
+                           FontAttributes="Bold"
+                           TextColor="White" />
+                    <Label Text="Track your progress, update your profile, and review how your sessions have gone over time."
+                           FontSize="14"
+                           TextColor="#B8C2E0" />
+                    <Label x:Name="AccountStatusLabel"
+                           FontSize="13"
+                           TextColor="#9FB0E0" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border StrokeThickness="0"
+                    Background="#FFFFFF"
+                    Padding="18">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="24" />
+                </Border.StrokeShape>
+                <VerticalStackLayout x:Name="AccountLoggedOutPanel" Spacing="10">
+                    <Label Text="Sign in required"
+                           FontSize="22"
+                           FontAttributes="Bold"
+                           TextColor="#101828" />
+                    <Label Text="Log in from the Play tab to access your profile and player statistics."
+                           TextColor="#667085" />
+                </VerticalStackLayout>
+            </Border>
+
+            <VerticalStackLayout x:Name="AccountLoggedInPanel" IsVisible="False" Spacing="16">
+                <Grid ColumnDefinitions="*,*"
+                      ColumnSpacing="12">
+                    <Border Grid.Column="0"
+                            StrokeThickness="0"
+                            Background="#FFFFFF"
+                            Padding="16">
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="22" />
+                        </Border.StrokeShape>
+                        <VerticalStackLayout>
+                            <Label Text="Total Points" TextColor="#667085" />
+                            <Label x:Name="TotalPointsLabel" FontSize="24" FontAttributes="Bold" TextColor="#101828" />
+                        </VerticalStackLayout>
+                    </Border>
+                    <Border Grid.Column="1"
+                            StrokeThickness="0"
+                            Background="#FFFFFF"
+                            Padding="16">
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="22" />
+                        </Border.StrokeShape>
+                        <VerticalStackLayout>
+                            <Label Text="Games Played" TextColor="#667085" />
+                            <Label x:Name="GamesPlayedLabel" FontSize="24" FontAttributes="Bold" TextColor="#101828" />
+                        </VerticalStackLayout>
+                    </Border>
+                </Grid>
+
+                <Grid ColumnDefinitions="*,*"
+                      ColumnSpacing="12">
+                    <Border Grid.Column="0"
+                            StrokeThickness="0"
+                            Background="#FFFFFF"
+                            Padding="16">
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="22" />
+                        </Border.StrokeShape>
+                        <VerticalStackLayout>
+                            <Label Text="Games Won" TextColor="#667085" />
+                            <Label x:Name="GamesWonLabel" FontSize="24" FontAttributes="Bold" TextColor="#101828" />
+                        </VerticalStackLayout>
+                    </Border>
+                    <Border Grid.Column="1"
+                            StrokeThickness="0"
+                            Background="#FFFFFF"
+                            Padding="16">
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="22" />
+                        </Border.StrokeShape>
+                        <VerticalStackLayout>
+                            <Label Text="Highest Score" TextColor="#667085" />
+                            <Label x:Name="HighestScoreLabel" FontSize="24" FontAttributes="Bold" TextColor="#101828" />
+                        </VerticalStackLayout>
+                    </Border>
+                </Grid>
+
+                <Border StrokeThickness="0"
+                        Background="#FFFFFF"
+                        Padding="18">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="24" />
+                    </Border.StrokeShape>
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="Profile"
+                               FontSize="20"
+                               FontAttributes="Bold"
+                               TextColor="#101828" />
+                        <Entry x:Name="UsernameEntry" Placeholder="Username" />
+                        <Entry x:Name="EmailEntry" Placeholder="Email" />
+                        <Button Text="Save profile"
+                                Clicked="OnSaveProfileClicked"
+                                BackgroundColor="#233876"
+                                TextColor="White"
+                                CornerRadius="16"
+                                HeightRequest="46" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border StrokeThickness="0"
+                        Background="#FFFFFF"
+                        Padding="18">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="24" />
+                    </Border.StrokeShape>
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="Change Password"
+                               FontSize="20"
+                               FontAttributes="Bold"
+                               TextColor="#101828" />
+                        <Entry x:Name="CurrentPasswordEntry" Placeholder="Current password" IsPassword="True" />
+                        <Entry x:Name="NewPasswordEntry" Placeholder="New password" IsPassword="True" />
+                        <Button Text="Change password"
+                                Clicked="OnChangePasswordClicked"
+                                BackgroundColor="#7C3AED"
+                                TextColor="White"
+                                CornerRadius="16"
+                                HeightRequest="46" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border StrokeThickness="0"
+                        Background="#F8FAFC"
+                        Padding="18">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="24" />
+                    </Border.StrokeShape>
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="Game History"
+                               FontSize="20"
+                               FontAttributes="Bold"
+                               TextColor="#101828" />
+                        <CollectionView x:Name="HistoryView"
+                                        HeightRequest="280">
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate>
+                                    <Border StrokeThickness="0"
+                                            Background="#FFFFFF"
+                                            Padding="12"
+                                            Margin="0,0,0,8">
+                                        <Border.StrokeShape>
+                                            <RoundRectangle CornerRadius="18" />
+                                        </Border.StrokeShape>
+                                        <VerticalStackLayout Spacing="4">
+                                            <Label Text="{Binding SessionCode}" FontAttributes="Bold" TextColor="#101828" />
+                                            <Label Text="{Binding Date, StringFormat='Played: {0:MMM d, yyyy HH:mm}'}" FontSize="12" TextColor="#667085" />
+                                            <Label Text="{Binding Score, StringFormat='Score: {0}'}" FontSize="12" TextColor="#0F766E" />
+                                            <Label Text="{Binding Rank, StringFormat='Rank: {0}'}" FontSize="12" TextColor="#1D4ED8" />
+                                        </VerticalStackLayout>
+                                    </Border>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+                    </VerticalStackLayout>
+                </Border>
+            </VerticalStackLayout>
+        </VerticalStackLayout>
+    </ScrollView>
+
+</ContentPage>

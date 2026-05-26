@@ -5,6 +5,7 @@
   <Project Path="QuizRush.Api/QuizRush.Api.csproj" />
   <Project Path="QuizRush.Core/QuizRush.Core.csproj" />
   <Project Path="QuizRush.Infrastructure/QuizRush.Infrastructure.csproj" />
+  <Project Path="QuizRush.Mobile/QuizRush.Mobile.csproj" Id="f538c54d-320b-4c3b-adce-becf05d7d850" />
   <Project Path="QuizRush.Tests/QuizRush.Tests.csproj" Id="7ec04f1f-a5e3-410e-8585-bf4e76b8fcec" />
   <Project Path="QuizRush.Web/QuizRush.Web.csproj" />
 </Solution>

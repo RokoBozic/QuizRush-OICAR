@@ -1,0 +1,303 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="QuizRush.Mobile.MainPage"
+             Title="Play"
+             BackgroundColor="#0B1020">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="20,18,20,28" Spacing="18">
+            <Border StrokeThickness="0"
+                    Background="#121A34"
+                    Padding="20">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="28" />
+                </Border.StrokeShape>
+                <VerticalStackLayout Spacing="14">
+                    <Image Source="quizrush_logo.png"
+                           HeightRequest="112"
+                           Aspect="AspectFit"
+                           HorizontalOptions="Center" />
+
+                    <VerticalStackLayout Spacing="4">
+                        <Label Text="Play live on QuizRush"
+                               FontSize="28"
+                               FontAttributes="Bold"
+                               TextColor="White" />
+                        <Label Text="Sign in, register, or join with a PIN and start answering in real time."
+                               FontSize="14"
+                               TextColor="#B8C2E0" />
+                        <Label x:Name="ApiBaseUrlLabel"
+                               FontSize="11"
+                               TextColor="#7181B4" />
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </Border>
+
+            <Border StrokeThickness="0"
+                    Background="#FFFFFF"
+                    Padding="18">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="24" />
+                </Border.StrokeShape>
+                <VerticalStackLayout x:Name="AccountPanel" Spacing="14">
+                    <Label Text="Account"
+                           FontSize="22"
+                           FontAttributes="Bold"
+                           TextColor="#101828" />
+
+                    <VerticalStackLayout x:Name="LoggedOutPanel" Spacing="14">
+                        <Grid ColumnDefinitions="*,*"
+                              ColumnSpacing="10">
+                            <Button x:Name="LoginModeButton"
+                                    Text="Login"
+                                    Clicked="OnShowLoginClicked"
+                                    CornerRadius="16"
+                                    HeightRequest="46" />
+                            <Button x:Name="RegisterModeButton"
+                                    Grid.Column="1"
+                                    Text="Register"
+                                    Clicked="OnShowRegisterClicked"
+                                    CornerRadius="16"
+                                    HeightRequest="46" />
+                        </Grid>
+
+                        <VerticalStackLayout x:Name="LoginFormPanel" Spacing="12">
+                            <Label Text="Welcome back"
+                                   FontAttributes="Bold"
+                                   TextColor="#111827" />
+                            <Label Text="Use your account to sync stats and host-ready profile data."
+                                   FontSize="13"
+                                   TextColor="#667085" />
+                            <Entry x:Name="LoginEmailEntry"
+                                   Placeholder="Email"
+                                   Keyboard="Email" />
+                            <Entry x:Name="LoginPasswordEntry"
+                                   Placeholder="Password"
+                                   IsPassword="True" />
+                            <Button Text="Login"
+                                    Clicked="OnLoginClicked"
+                                    BackgroundColor="#233876"
+                                    TextColor="White"
+                                    CornerRadius="16"
+                                    HeightRequest="48" />
+                            <Label Text="Don’t have an account yet?"
+                                   FontSize="12"
+                                   TextColor="#667085" />
+                            <Button Text="Create one now"
+                                    Clicked="OnShowRegisterClicked"
+                                    BackgroundColor="#EEF2FF"
+                                    TextColor="#233876"
+                                    CornerRadius="16"
+                                    HeightRequest="42" />
+                        </VerticalStackLayout>
+
+                        <VerticalStackLayout x:Name="RegisterFormPanel"
+                                             IsVisible="False"
+                                             Spacing="12">
+                            <Label Text="Create your account"
+                                   FontAttributes="Bold"
+                                   TextColor="#111827" />
+                            <Label Text="Register once, then reuse your profile for mobile and web play."
+                                   FontSize="13"
+                                   TextColor="#667085" />
+                            <Entry x:Name="RegisterUsernameEntry"
+                                   Placeholder="Username" />
+                            <Entry x:Name="RegisterEmailEntry"
+                                   Placeholder="Email"
+                                   Keyboard="Email" />
+                            <Entry x:Name="RegisterPasswordEntry"
+                                   Placeholder="Password (min 8 chars)"
+                                   IsPassword="True" />
+                            <Button Text="Create account"
+                                    Clicked="OnRegisterClicked"
+                                    BackgroundColor="#7C3AED"
+                                    TextColor="White"
+                                    CornerRadius="16"
+                                    HeightRequest="48" />
+                            <Label Text="Already registered?"
+                                   FontSize="12"
+                                   TextColor="#667085" />
+                            <Button Text="Back to login"
+                                    Clicked="OnShowLoginClicked"
+                                    BackgroundColor="#F4F3FF"
+                                    TextColor="#5B21B6"
+                                    CornerRadius="16"
+                                    HeightRequest="42" />
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+
+                    <VerticalStackLayout x:Name="LoggedInPanel"
+                                         IsVisible="False"
+                                         Spacing="12">
+                        <Border Background="#EEF2FF"
+                                StrokeThickness="0"
+                                Padding="14">
+                            <Border.StrokeShape>
+                                <RoundRectangle CornerRadius="18" />
+                            </Border.StrokeShape>
+                            <VerticalStackLayout Spacing="4">
+                                <Label x:Name="WelcomeLabel"
+                                       FontSize="18"
+                                       FontAttributes="Bold"
+                                       TextColor="#312E81" />
+                                <Label x:Name="EmailLabel"
+                                       TextColor="#4C1D95" />
+                            </VerticalStackLayout>
+                        </Border>
+                        <Button Text="Logout"
+                                Clicked="OnLogoutClicked"
+                                BackgroundColor="#F8FAFC"
+                                TextColor="#0F172A"
+                                CornerRadius="16"
+                                HeightRequest="44" />
+                    </VerticalStackLayout>
+
+                    <Label x:Name="AuthStatusLabel"
+                           FontSize="13"
+                           TextColor="#B42318" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border StrokeThickness="0"
+                    Background="#FFFFFF"
+                    Padding="18">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="24" />
+                </Border.StrokeShape>
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="Join a live game"
+                           FontSize="22"
+                           FontAttributes="Bold"
+                           TextColor="#101828" />
+                    <Label Text="Enter the session PIN from the host and jump straight into the leaderboard race."
+                           FontSize="13"
+                           TextColor="#667085" />
+
+                    <Entry x:Name="PlayerNameEntry"
+                           Placeholder="Player name" />
+                    <Entry x:Name="SessionCodeEntry"
+                           Placeholder="Session PIN"
+                           MaxLength="8"
+                           TextTransform="Uppercase" />
+                    <Button x:Name="JoinButton"
+                            Text="Join session"
+                            Clicked="OnJoinClicked"
+                            BackgroundColor="#0F766E"
+                            TextColor="White"
+                            CornerRadius="16"
+                            HeightRequest="48" />
+                    <Label x:Name="JoinStatusLabel"
+                           FontSize="13"
+                           TextColor="#B42318" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border x:Name="GamePanel"
+                    IsVisible="False"
+                    StrokeThickness="0"
+                    Background="#F8FAFC"
+                    Padding="18">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="24" />
+                </Border.StrokeShape>
+                <VerticalStackLayout Spacing="14">
+                    <HorizontalStackLayout Spacing="8">
+                        <Label Text="Live Session"
+                               FontSize="20"
+                               FontAttributes="Bold"
+                               TextColor="#0F172A" />
+                        <Label x:Name="LiveSessionCodeLabel"
+                               FontSize="20"
+                               FontAttributes="Bold"
+                               TextColor="#2563EB" />
+                    </HorizontalStackLayout>
+
+                    <Label x:Name="GameStateLabel"
+                           FontSize="14"
+                           TextColor="#475467" />
+
+                    <VerticalStackLayout x:Name="GamblePanel"
+                                         IsVisible="False"
+                                         Spacing="8">
+                        <Label x:Name="GamblePromptLabel"
+                               FontAttributes="Bold"
+                               TextColor="#7C2D12" />
+                        <HorizontalStackLayout Spacing="8">
+                            <Entry x:Name="GambleEntry"
+                                   Keyboard="Numeric"
+                                   Placeholder="0-100"
+                                   WidthRequest="100" />
+                            <Button Text="Submit gamble"
+                                    Clicked="OnSubmitGambleClicked"
+                                    BackgroundColor="#F59E0B"
+                                    TextColor="White"
+                                    CornerRadius="14" />
+                        </HorizontalStackLayout>
+                    </VerticalStackLayout>
+
+                    <VerticalStackLayout x:Name="QuestionPanel"
+                                         IsVisible="False"
+                                         Spacing="10">
+                        <Label x:Name="QuestionTextLabel"
+                               FontSize="22"
+                               FontAttributes="Bold"
+                               TextColor="#0F172A" />
+                        <Label x:Name="QuestionMetaLabel"
+                               FontSize="13"
+                               TextColor="#667085" />
+                        <VerticalStackLayout x:Name="AnswersLayout"
+                                             Spacing="10" />
+                    </VerticalStackLayout>
+
+                    <Label x:Name="AnswerFeedbackLabel"
+                           FontAttributes="Bold"
+                           TextColor="#047857" />
+
+                    <VerticalStackLayout Spacing="8">
+                        <Label Text="Leaderboard"
+                               FontSize="18"
+                               FontAttributes="Bold"
+                               TextColor="#0F172A" />
+                        <CollectionView x:Name="LeaderboardView"
+                                        HeightRequest="220">
+                            <CollectionView.ItemTemplate>
+                                <DataTemplate>
+                                    <Border StrokeThickness="0"
+                                            Background="#FFFFFF"
+                                            Padding="10"
+                                            Margin="0,0,0,6">
+                                        <Border.StrokeShape>
+                                            <RoundRectangle CornerRadius="16" />
+                                        </Border.StrokeShape>
+                                        <Grid ColumnDefinitions="40,*,Auto">
+                                            <Label Grid.Column="0"
+                                                   Text="{Binding Rank}"
+                                                   FontAttributes="Bold"
+                                                   TextColor="#1D4ED8" />
+                                            <Label Grid.Column="1"
+                                                   Text="{Binding PlayerName}"
+                                                   TextColor="#0F172A" />
+                                            <Label Grid.Column="2"
+                                                   Text="{Binding Score}"
+                                                   FontAttributes="Bold"
+                                                   TextColor="#0F766E" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </CollectionView.ItemTemplate>
+                        </CollectionView>
+                    </VerticalStackLayout>
+
+                    <Button Text="Leave session"
+                            Clicked="OnLeaveClicked"
+                            BackgroundColor="#E2E8F0"
+                            TextColor="#0F172A"
+                            CornerRadius="16"
+                            HeightRequest="46" />
+                </VerticalStackLayout>
+            </Border>
+        </VerticalStackLayout>
+    </ScrollView>
+
+</ContentPage>
