@@ -1,0 +1,407 @@
+@page "/quizzes/edit/{QuizId:long}"
+@rendermode InteractiveServer
+@using System.Net
+@using System.Net.Http.Json
+@using QuizRush.Core.ViewModels
+@using QuizRush.Web.Services
+@inject HttpClient Http
+@inject AuthService AuthService
+@inject NavigationManager Navigation
+
+<PageTitle>Edit Quiz</PageTitle>
+
+<h1>Edit Quiz</h1>
+
+@if (!_clientReady || _loading)
+{
+    <p class="text-muted">Loading…</p>
+}
+else if (!_isAuthenticated)
+{
+    <div class="alert alert-warning">You must be signed in to edit quizzes.</div>
+    <a class="btn btn-primary" href="/login">Login</a>
+}
+else if (_loadFailed)
+{
+    <div class="alert alert-danger">@_loadErrorMessage</div>
+    <a class="btn btn-outline-secondary" href="/dashboard/host">Back to Dashboard</a>
+}
+else
+{
+    <div class="row">
+        <div class="col-lg-10">
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Quiz Details</h5>
+                    <div class="mb-3">
+                        <label class="form-label">Title <span class="text-danger">*</span></label>
+                        <input class="form-control" maxlength="100" @bind="Model.Title" placeholder="Quiz title" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" rows="2" maxlength="2000" @bind="Model.Description" placeholder="Optional description"></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <h5>Questions <span class="badge bg-info">@Model.Questions.Count</span></h5>
+            </div>
+
+            @for (var qi = 0; qi < Model.Questions.Count; qi++)
+            {
+                var qIndex = qi;
+                var question = Model.Questions[qIndex];
+                <div class="card mb-3 border-primary">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <div>
+                            <span>Question @(qIndex + 1)</span>
+                            @if (qIndex > 0)
+                            {
+                                <button type="button" class="btn btn-sm btn-outline-secondary ms-2" @onclick="() => MoveQuestionUp(qIndex)" title="Move up">↑</button>
+                            }
+                            @if (qIndex < Model.Questions.Count - 1)
+                            {
+                                <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="() => MoveQuestionDown(qIndex)" title="Move down">↓</button>
+                            }
+                        </div>
+                        @if (Model.Questions.Count > 1)
+                        {
+                            <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => RemoveQuestion(qIndex)">Remove</button>
+                        }
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">Question Text <span class="text-danger">*</span></label>
+                            <textarea class="form-control" rows="2" maxlength="500" @bind="question.Text"></textarea>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label">Points</label>
+                                <input type="number" class="form-control" min="0" max="1000" @bind="question.PointsValue" />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">Time Limit (seconds)</label>
+                                <input type="number" class="form-control" min="5" max="600" @bind="question.TimeLimitSeconds" />
+                            </div>
+                        </div>
+                        <h6 class="text-muted">Answers (at least 2; mark one as correct)</h6>
+                        @for (var ai = 0; ai < question.Answers.Count; ai++)
+                        {
+                            var aIndex = ai;
+                            var answer = question.Answers[aIndex];
+                            <div class="input-group mb-2">
+                                <div class="input-group-text">
+                                    <input type="radio" name="correct_@qIndex" @onchange="@(() => SetCorrectAnswer(qIndex, aIndex))" checked="@answer.IsCorrect" />
+                                </div>
+                                <input class="form-control" maxlength="250" @bind="answer.Text" placeholder="Answer text" />
+                                @if (question.Answers.Count > 2)
+                                {
+                                    <button type="button" class="btn btn-outline-secondary" @onclick="() => RemoveAnswer(qIndex, aIndex)">Remove</button>
+                                }
+                            </div>
+                        }
+                        <button type="button" class="btn btn-sm btn-outline-primary" @onclick="() => AddAnswer(qIndex)">+ Add Answer</button>
+                    </div>
+                </div>
+            }
+
+            <button type="button" class="btn btn-secondary mb-3" @onclick="AddQuestion">+ Add Question</button>
+
+            <div class="d-flex gap-2 mb-4">
+                <button type="button" class="btn btn-primary" @onclick="SubmitAsync" disabled="@_submitting">
+                    @if (_submitting)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2"></span>
+                    }
+                    Save Changes
+                </button>
+                <a class="btn btn-outline-secondary" href="/dashboard/host">Cancel</a>
+            </div>
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrWhiteSpace(StatusMessage))
+{
+    <div class="alert @(StatusIsError ? "alert-danger" : "alert-success") mt-2">@StatusMessage</div>
+}
+
+@code {
+    [Parameter] public long QuizId { get; set; }
+
+    private bool _clientReady;
+    private bool _isAuthenticated;
+    private bool _loading = true;
+    private bool _loadFailed;
+    private string _loadErrorMessage = string.Empty;
+    private bool _submitting;
+    private string StatusMessage { get; set; } = string.Empty;
+    private bool StatusIsError { get; set; }
+
+    private QuizViewModel Model { get; set; } = new();
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || _clientReady)
+        {
+            return;
+        }
+
+        _clientReady = true;
+        _isAuthenticated = await AuthService.IsAuthenticatedAsync();
+        if (!_isAuthenticated)
+        {
+            Navigation.NavigateTo("/login", replace: true);
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        await AuthService.ApplyAuthorizationHeaderAsync(Http);
+        await LoadQuizAsync();
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadQuizAsync()
+    {
+        _loading = true;
+        _loadFailed = false;
+        _loadErrorMessage = string.Empty;
+
+        try
+        {
+            using var response = await Http.GetAsync($"api/quiz/{QuizId}");
+
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                Navigation.NavigateTo("/login", replace: true);
+                return;
+            }
+
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                _loadFailed = true;
+                _loadErrorMessage = "Quiz not found or you do not have permission to edit it.";
+                return;
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _loadFailed = true;
+                _loadErrorMessage = $"Failed to load quiz ({(int)response.StatusCode}).";
+                return;
+            }
+
+            var quiz = await response.Content.ReadFromJsonAsync<QuizResponseViewModel>();
+            if (quiz == null)
+            {
+                _loadFailed = true;
+                _loadErrorMessage = "Quiz not found or you do not have permission to edit it.";
+                return;
+            }
+
+            Model = MapToViewModel(quiz);
+        }
+        catch (Exception ex)
+        {
+            _loadFailed = true;
+            _loadErrorMessage = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static QuizViewModel MapToViewModel(QuizResponseViewModel quiz)
+    {
+        return new QuizViewModel
+        {
+            Title = quiz.Title,
+            Description = quiz.Description,
+            Questions = quiz.Questions.Select(q => new QuestionViewModel
+            {
+                Text = q.Text,
+                PointsValue = q.PointsValue,
+                TimeLimitSeconds = q.TimeLimitSeconds,
+                Answers = q.Answers.Select(a => new AnswerViewModel
+                {
+                    Text = a.Text,
+                    IsCorrect = a.IsCorrect
+                }).ToList()
+            }).ToList()
+        };
+    }
+
+    private static QuestionViewModel NewQuestion()
+    {
+        return new QuestionViewModel
+        {
+            PointsValue = 100,
+            TimeLimitSeconds = 20,
+            Answers = new List<AnswerViewModel>
+            {
+                new() { Text = string.Empty, IsCorrect = true },
+                new() { Text = string.Empty, IsCorrect = false }
+            }
+        };
+    }
+
+    private void AddQuestion()
+    {
+        Model.Questions.Add(NewQuestion());
+    }
+
+    private void RemoveQuestion(int index)
+    {
+        if (Model.Questions.Count <= 1)
+        {
+            return;
+        }
+
+        Model.Questions.RemoveAt(index);
+    }
+
+    private void MoveQuestionUp(int index)
+    {
+        if (index <= 0) return;
+        var temp = Model.Questions[index];
+        Model.Questions[index] = Model.Questions[index - 1];
+        Model.Questions[index - 1] = temp;
+    }
+
+    private void MoveQuestionDown(int index)
+    {
+        if (index >= Model.Questions.Count - 1) return;
+        var temp = Model.Questions[index];
+        Model.Questions[index] = Model.Questions[index + 1];
+        Model.Questions[index + 1] = temp;
+    }
+
+    private void AddAnswer(int questionIndex)
+    {
+        Model.Questions[questionIndex].Answers.Add(new AnswerViewModel { Text = string.Empty, IsCorrect = false });
+    }
+
+    private void RemoveAnswer(int questionIndex, int answerIndex)
+    {
+        var answers = Model.Questions[questionIndex].Answers;
+        if (answers.Count <= 2)
+        {
+            return;
+        }
+
+        answers.RemoveAt(answerIndex);
+    }
+
+    private void SetCorrectAnswer(int questionIndex, int answerIndex)
+    {
+        var question = Model.Questions[questionIndex];
+        foreach (var answer in question.Answers)
+        {
+            answer.IsCorrect = false;
+        }
+        question.Answers[answerIndex].IsCorrect = true;
+    }
+
+    private async Task SubmitAsync()
+    {
+        StatusMessage = string.Empty;
+        StatusIsError = false;
+
+        if (string.IsNullOrWhiteSpace(Model.Title) || Model.Title.Trim().Length < 3)
+        {
+            StatusIsError = true;
+            StatusMessage = "Title must be at least 3 characters.";
+            return;
+        }
+
+        foreach (var q in Model.Questions)
+        {
+            if (string.IsNullOrWhiteSpace(q.Text))
+            {
+                StatusIsError = true;
+                StatusMessage = "Each question needs text.";
+                return;
+            }
+
+            if (q.Answers.Count < 2)
+            {
+                StatusIsError = true;
+                StatusMessage = "Each question needs at least two answers.";
+                return;
+            }
+
+            if (q.Answers.Any(a => string.IsNullOrWhiteSpace(a.Text)))
+            {
+                StatusIsError = true;
+                StatusMessage = "Fill in all answer texts.";
+                return;
+            }
+
+            if (!q.Answers.Any(a => a.IsCorrect))
+            {
+                StatusIsError = true;
+                StatusMessage = "Each question needs one correct answer.";
+                return;
+            }
+        }
+
+        _submitting = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            await AuthService.ApplyAuthorizationHeaderAsync(Http);
+            using var response = await Http.PutAsJsonAsync($"api/quiz/{QuizId}", Model);
+
+            if (response.StatusCode == HttpStatusCode.Unauthorized)
+            {
+                StatusIsError = true;
+                StatusMessage = "Session expired. Please log in again.";
+                Navigation.NavigateTo("/login", replace: true);
+                return;
+            }
+
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                StatusIsError = true;
+                StatusMessage = "Quiz not found or you do not have permission to edit it.";
+                return;
+            }
+
+            if (response.StatusCode == HttpStatusCode.Forbidden)
+            {
+                StatusIsError = true;
+                var forbiddenMessage = await response.Content.ReadAsStringAsync();
+                StatusMessage = string.IsNullOrWhiteSpace(forbiddenMessage)
+                    ? "You can only edit quizzes you created."
+                    : forbiddenMessage.Trim('"');
+                return;
+            }
+
+            if (response.IsSuccessStatusCode)
+            {
+                StatusMessage = $"Quiz \"{Model.Title}\" updated successfully!";
+                await Task.Delay(1500);
+                Navigation.NavigateTo("/dashboard/host");
+                return;
+            }
+
+            StatusIsError = true;
+            var err = await response.Content.ReadAsStringAsync();
+            StatusMessage = string.IsNullOrWhiteSpace(err) ? $"Save failed ({(int)response.StatusCode})." : err.Trim('"');
+        }
+        catch (Exception ex)
+        {
+            StatusIsError = true;
+            StatusMessage = ex.Message;
+        }
+        finally
+        {
+            _submitting = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+}
