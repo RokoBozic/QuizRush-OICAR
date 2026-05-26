@@ -92,7 +92,7 @@ else
                             var answer = question.Answers[aIndex];
                             <div class="input-group mb-2">
                                 <div class="input-group-text">
-                                    <input type="radio" name="correct_@qIndex" @onchange="@((ChangeEventArgs e) => SetCorrectAnswer(qIndex, aIndex, (bool)e.Value!))" checked="@answer.IsCorrect" />
+                                    <input type="radio" name="correct_@qIndex" @onchange="@(() => SetCorrectAnswer(qIndex, aIndex))" checked="@answer.IsCorrect" />
                                 </div>
                                 <input class="form-control" maxlength="250" @bind="answer.Text" placeholder="Answer text" />
                                 @if (question.Answers.Count > 2)
@@ -295,10 +295,8 @@ else
         answers.RemoveAt(answerIndex);
     }
 
-    private void SetCorrectAnswer(int questionIndex, int answerIndex, bool isCorrect)
+    private void SetCorrectAnswer(int questionIndex, int answerIndex)
     {
-        if (!isCorrect) return;
-
         var question = Model.Questions[questionIndex];
         foreach (var answer in question.Answers)
         {
