@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="QuizRush.Mobile.Pages.QuizzesPage"
+             Title="Quizzes"
+             BackgroundColor="#0B1020">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="20,18,20,28" Spacing="18">
+            <Border StrokeThickness="0"
+                    Background="#121A34"
+                    Padding="20">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="28" />
+                </Border.StrokeShape>
+                <VerticalStackLayout Spacing="12">
+                    <Image Source="quizrush_logo.png"
+                           HeightRequest="72"
+                           Aspect="AspectFit"
+                           HorizontalOptions="Center" />
+                    <Label Text="Build and edit quizzes"
+                           FontSize="28"
+                           FontAttributes="Bold"
+                           TextColor="White" />
+                    <Label Text="Create rounds, tune timing and points, and keep your question bank in sync with the web app."
+                           FontSize="14"
+                           TextColor="#B8C2E0" />
+                    <Label x:Name="QuizStatusLabel"
+                           FontSize="13"
+                           TextColor="#9FB0E0" />
+                </VerticalStackLayout>
+            </Border>
+
+            <Border StrokeThickness="0"
+                    Background="#FFFFFF"
+                    Padding="18">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="24" />
+                </Border.StrokeShape>
+                <VerticalStackLayout x:Name="QuizzesLoggedOutPanel" Spacing="10">
+                    <Label Text="Quiz builder locked"
+                           FontSize="22"
+                           FontAttributes="Bold"
+                           TextColor="#101828" />
+                    <Label Text="Log in to create and edit quizzes."
+                           TextColor="#667085" />
+                </VerticalStackLayout>
+            </Border>
+
+            <VerticalStackLayout x:Name="QuizzesLoggedInPanel" IsVisible="False" Spacing="16">
+                <Border StrokeThickness="0"
+                        Background="#FFFFFF"
+                        Padding="18">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="24" />
+                    </Border.StrokeShape>
+                    <VerticalStackLayout Spacing="12">
+                        <Label Text="Quiz setup"
+                               FontSize="22"
+                               FontAttributes="Bold"
+                               TextColor="#101828" />
+                        <Label Text="Load an existing quiz or start a fresh one."
+                               FontSize="13"
+                               TextColor="#667085" />
+
+                        <Picker x:Name="ExistingQuizPicker"
+                                Title="Load an existing quiz"
+                                SelectedIndexChanged="OnExistingQuizSelected" />
+
+                        <Button Text="Create new empty quiz"
+                                Clicked="OnCreateNewClicked"
+                                BackgroundColor="#EEF2FF"
+                                TextColor="#233876"
+                                CornerRadius="16"
+                                HeightRequest="44" />
+
+                        <Entry x:Name="TitleEntry"
+                               Placeholder="Quiz title" />
+                        <Editor x:Name="DescriptionEditor"
+                                Placeholder="Description"
+                                AutoSize="TextChanges"
+                                HeightRequest="100" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <Border StrokeThickness="0"
+                        Background="#F8FAFC"
+                        Padding="18">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="24" />
+                    </Border.StrokeShape>
+                    <VerticalStackLayout Spacing="12">
+                        <Label x:Name="QuestionCountLabel"
+                               FontAttributes="Bold"
+                               FontSize="18"
+                               TextColor="#101828" />
+
+                        <VerticalStackLayout x:Name="QuestionsLayout"
+                                             Spacing="14" />
+
+                        <Grid ColumnDefinitions="*,*"
+                              ColumnSpacing="10">
+                            <Button Text="Add question"
+                                    Clicked="OnAddQuestionClicked"
+                                    BackgroundColor="#233876"
+                                    TextColor="White"
+                                    CornerRadius="16"
+                                    HeightRequest="46" />
+                            <Button x:Name="SaveQuizButton"
+                                    Grid.Column="1"
+                                    Text="Save quiz"
+                                    Clicked="OnSaveQuizClicked"
+                                    BackgroundColor="#0F766E"
+                                    TextColor="White"
+                                    CornerRadius="16"
+                                    HeightRequest="46" />
+                        </Grid>
+                    </VerticalStackLayout>
+                </Border>
+            </VerticalStackLayout>
+        </VerticalStackLayout>
+    </ScrollView>
+
+</ContentPage>
