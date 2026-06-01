@@ -1,0 +1,7 @@
+<Project>
+  <!-- APT2264: aapt2 fails when obj/bin paths are too long (common under OneDrive + deep folders). -->
+  <PropertyGroup Condition="'$(OS)' == 'Windows_NT'">
+    <BaseIntermediateOutputPath>C:\.quizrush\obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+    <BaseOutputPath>C:\.quizrush\bin\$(MSBuildProjectName)\</BaseOutputPath>
+  </PropertyGroup>
+</Project>

@@ -90,11 +90,11 @@ public partial class HostPage : ContentPage
     {
         if (sender is Button button && button.CommandParameter is long quizId)
         {
-            await DisplayAlertAsync("Use Quizzes Tab", $"Open the Quizzes tab to edit quiz #{quizId}.", "OK");
+            await DisplayAlert("Use Quizzes Tab", $"Open the Quizzes tab to edit quiz #{quizId}.", "OK");
         }
         else if (sender is Button stringButton && long.TryParse(stringButton.CommandParameter?.ToString(), out var parsedId))
         {
-            await DisplayAlertAsync("Use Quizzes Tab", $"Open the Quizzes tab to edit quiz #{parsedId}.", "OK");
+            await DisplayAlert("Use Quizzes Tab", $"Open the Quizzes tab to edit quiz #{parsedId}.", "OK");
         }
     }
 
