@@ -29,11 +29,11 @@ public class AuthController : ControllerBase
     [HttpPost("register")]
     public async Task<ActionResult<string>> Register(RegisterViewModel model)
     {
-        if (await _context.Users.AnyAsync(u => u.Email == model.Email))
-            return BadRequest("Email already in use.");
-
-        if (await _context.Users.AnyAsync(u => u.Username == model.Username))
-            return BadRequest("Username already taken.");
+        var duplicateMessage = await GetDuplicateUserMessageAsync(model.Email, model.Username);
+        if (duplicateMessage is not null)
+        {
+            return BadRequest(duplicateMessage);
+        }
 
         string salt = PasswordHashProvider.GenerateSalt();
         string hash = PasswordHashProvider.HashPassword(model.Password, salt);
@@ -47,9 +47,38 @@ public class AuthController : ControllerBase
         };
 
         _context.Users.Add(user);
-        await _context.SaveChangesAsync();
+
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            duplicateMessage = await GetDuplicateUserMessageAsync(model.Email, model.Username);
+            if (duplicateMessage is not null)
+            {
+                return BadRequest(duplicateMessage);
+            }
+
+            throw;
+        }
 
         return Ok("Registration successful.");
+    }
+
+    private async Task<string?> GetDuplicateUserMessageAsync(string email, string username)
+    {
+        if (await _context.Users.AnyAsync(u => u.Email == email))
+        {
+            return "An account with this email already exists. Please log in.";
+        }
+
+        if (await _context.Users.AnyAsync(u => u.Username == username))
+        {
+            return "This username is already taken. Please log in or choose another username.";
+        }
+
+        return null;
     }
 
     /// <summary>Logs in with email and password, returns a JWT token.</summary>

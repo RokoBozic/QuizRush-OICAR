@@ -66,11 +66,7 @@ public partial class QuizzesPage : ContentPage
 
     private void OnCreateNewClicked(object? sender, EventArgs e)
     {
-        _editingQuizId = null;
-        _model = CreateEmptyQuiz();
-        ExistingQuizPicker.SelectedIndex = -1;
-        PopulateFormFromModel();
-        QuizStatusLabel.Text = "Creating a new quiz.";
+        ResetToNewQuizForm("Creating a new quiz.");
     }
 
     private void OnAddQuestionClicked(object? sender, EventArgs e)
@@ -87,19 +83,19 @@ public partial class QuizzesPage : ContentPage
             SyncModelFromUi();
             ValidateModel(_model);
 
+            var savedTitle = _model.Title;
             if (_editingQuizId.HasValue)
             {
                 await _quizApiService.UpdateQuizAsync(_editingQuizId.Value, _model);
-                QuizStatusLabel.Text = "Quiz updated successfully.";
+                await RefreshQuizListAsync();
+                ResetToNewQuizForm($"Saved \"{savedTitle}\". Pick a quiz to edit or create a new one.");
             }
             else
             {
-                var created = await _quizApiService.CreateQuizAsync(_model);
-                _editingQuizId = created.Id;
-                QuizStatusLabel.Text = $"Created \"{created.Title}\".";
+                await _quizApiService.CreateQuizAsync(_model);
+                await RefreshQuizListAsync();
+                ResetToNewQuizForm($"Created \"{savedTitle}\". Pick a quiz to edit or create a new one.");
             }
-
-            await RefreshAsync();
         }
         catch (Exception ex)
         {
@@ -121,14 +117,33 @@ public partial class QuizzesPage : ContentPage
 
         try
         {
-            _existingQuizzes = await _quizApiService.GetMyQuizzesAsync();
-            ExistingQuizPicker.ItemsSource = _existingQuizzes.Select(q => q.Title).ToList();
-            PopulateFormFromModel();
+            await RefreshQuizListAsync();
+            if (!_editingQuizId.HasValue)
+            {
+                ResetToNewQuizForm(string.IsNullOrWhiteSpace(QuizStatusLabel.Text)
+                    ? "Select a quiz to edit or create a new one."
+                    : QuizStatusLabel.Text);
+            }
         }
         catch (Exception ex)
         {
             QuizStatusLabel.Text = ex.Message;
         }
+    }
+
+    private async Task RefreshQuizListAsync()
+    {
+        _existingQuizzes = await _quizApiService.GetMyQuizzesAsync();
+        ExistingQuizPicker.ItemsSource = _existingQuizzes.Select(q => q.Title).ToList();
+    }
+
+    private void ResetToNewQuizForm(string statusMessage)
+    {
+        _editingQuizId = null;
+        _model = CreateEmptyQuiz();
+        ExistingQuizPicker.SelectedIndex = -1;
+        PopulateFormFromModel();
+        QuizStatusLabel.Text = statusMessage;
     }
 
     private void PopulateFormFromModel()

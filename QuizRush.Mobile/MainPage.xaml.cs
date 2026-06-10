@@ -74,7 +74,7 @@ public partial class MainPage : ContentPage
         catch (Exception ex)
         {
             AuthStatusLabel.TextColor = Color.FromArgb("#B91C1C");
-            AuthStatusLabel.Text = ex.Message;
+            AuthStatusLabel.Text = ToFriendlyAuthError(ex.Message);
         }
     }
 
@@ -103,7 +103,18 @@ public partial class MainPage : ContentPage
         catch (Exception ex)
         {
             AuthStatusLabel.TextColor = Color.FromArgb("#B91C1C");
-            AuthStatusLabel.Text = ex.Message;
+
+            if (IsExistingAccountMessage(ex.Message))
+            {
+                AuthStatusLabel.Text = "This account already exists. Please log in.";
+                LoginEmailEntry.Text = RegisterEmailEntry.Text;
+                PlayerNameEntry.Text = RegisterUsernameEntry.Text;
+                RegisterPasswordEntry.Text = string.Empty;
+                ShowLoginMode();
+                return;
+            }
+
+            AuthStatusLabel.Text = ToFriendlyAuthError(ex.Message);
         }
     }
 
@@ -387,6 +398,41 @@ public partial class MainPage : ContentPage
         _showLogin = true;
         AuthStatusLabel.Text = string.Empty;
         UpdateAuthModeUi();
+    }
+
+    private static bool IsExistingAccountMessage(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return false;
+        }
+
+        return message.Contains("already exists", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("already in use", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("already taken", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string ToFriendlyAuthError(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return "Something went wrong. Try again.";
+        }
+
+        if (message.Contains("Cannot open database", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("transient failure", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("SqlException", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Backend database is not ready. Start QuizRush.Api in Visual Studio, then try again.";
+        }
+
+        if (message.Contains("Connection refused", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("No connection could be made", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Cannot reach the API. Start QuizRush.Api (http://localhost:5176) and try again.";
+        }
+
+        return message.Length > 200 ? $"{message[..200]}…" : message;
     }
 
     private void ShowRegisterMode()

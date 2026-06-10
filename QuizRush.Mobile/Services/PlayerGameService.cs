@@ -51,6 +51,12 @@ public class PlayerGameService : IAsyncDisposable
         await _hubConnection!.InvokeAsync("StartGame", sessionCode.Trim().ToUpperInvariant());
     }
 
+    public async Task EndGamblingPhaseAsync(string sessionCode)
+    {
+        await EnsureConnectedAsync();
+        await _hubConnection!.InvokeAsync("EndGamblingPhase", sessionCode.Trim().ToUpperInvariant());
+    }
+
     public async Task NextQuestionAsync(string sessionCode)
     {
         await EnsureConnectedAsync();
@@ -91,6 +97,8 @@ public class PlayerGameService : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        _authService.Session.SessionChanged -= HandleSessionChanged;
+
         if (_hubConnection is not null)
         {
             await _hubConnection.DisposeAsync();
@@ -121,6 +129,36 @@ public class PlayerGameService : IAsyncDisposable
         if (_hubConnection.State == HubConnectionState.Disconnected)
         {
             await _hubConnection.StartAsync();
+        }
+    }
+
+    private void HandleSessionChanged()
+    {
+        _ = ResetConnectionAsync();
+    }
+
+    private async Task ResetConnectionAsync()
+    {
+        if (_hubConnection is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (_hubConnection.State != HubConnectionState.Disconnected)
+            {
+                await _hubConnection.StopAsync();
+            }
+        }
+        catch
+        {
+            // Ignore shutdown errors during auth changes.
+        }
+        finally
+        {
+            await _hubConnection.DisposeAsync();
+            _hubConnection = null;
         }
     }
 
@@ -211,5 +249,6 @@ public class PlayerGameService : IAsyncDisposable
     {
         _endpointProvider = endpointProvider;
         _authService = authService;
+        _authService.Session.SessionChanged += HandleSessionChanged;
     }
 }

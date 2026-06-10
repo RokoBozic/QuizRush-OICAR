@@ -2,7 +2,31 @@
 
 ## Prerequisites
 - .NET 8 SDK
-- SQL Server Express (or update connection string to your local SQL instance)
+- SQL Server LocalDB (installed with Visual Studio / SQL Server Express) **or** SQL Server Express
+
+## Database connection (local dev)
+
+Default connection string (Windows auth, database created on API startup in Development):
+
+```
+Server=(localdb)\mssqllocaldb;Database=QuizRushDb;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true
+```
+
+Configured in `QuizRush.Api/appsettings.json` and `appsettings.Development.json` as `ConnectionStrings:Default`.
+
+**SQL Server Express instead of LocalDB** — set `ConnectionStrings:Default` in `appsettings.Development.json` or user secrets:
+
+```
+Server=.\SQLEXPRESS;Database=QuizRushDb;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true
+```
+
+Override without editing files:
+
+```bash
+dotnet user-secrets set "ConnectionStrings:Default" "Server=.\SQLEXPRESS;Database=QuizRushDb;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true" --project QuizRush.Api
+```
+
+In Development, the API applies EF Core migrations automatically so `QuizRushDb` is created if missing. For manual setup: `dotnet ef database update --project QuizRush.Infrastructure --startup-project QuizRush.Api`.
 
 ## Run Order (important)
 1. Start API:

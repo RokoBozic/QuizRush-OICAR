@@ -208,6 +208,46 @@ namespace QuizRush.Api.Hubs
         }
 
         /// <summary>
+        /// Ends the current gambling phase early and immediately continues to the question.
+        /// </summary>
+        public async Task EndGamblingPhase(string sessionCode)
+        {
+            if (!TryGetSession(sessionCode, out var session))
+            {
+                await Clients.Caller.GameError("Session not found.");
+                return;
+            }
+
+            if (!IsHostCaller(session))
+            {
+                await Clients.Caller.GameError("Only host can end the gambling phase.");
+                return;
+            }
+
+            string code = session.SessionCode;
+
+            await Groups.AddToGroupAsync(Context.ConnectionId, code);
+            session.HostConnectionId = Context.ConnectionId;
+
+            if (!session.GameLive)
+            {
+                await Clients.Caller.GameError("Start the game before ending the gambling phase.");
+                return;
+            }
+
+            if (!session.InGamblingPhase)
+            {
+                await Clients.Caller.GameError("There is no active gambling phase to end.");
+                return;
+            }
+
+            CancelGamblingPhase(session);
+            await Clients.Group(code).GamblingPhaseStarted(0);
+            await Clients.Caller.HostSelfAck("You ended the gambling phase.");
+            await Clients.OthersInGroup(code).HostPlayerNotice("Gambling phase ended by host.");
+        }
+
+        /// <summary>
         /// Advances to the next question, or ends game if there are no more questions.
         /// </summary>
         public async Task NextQuestion(string sessionCode)
@@ -219,9 +259,6 @@ namespace QuizRush.Api.Hubs
             }
 
             string code = session.SessionCode;
-
-            CancelSubmissionAutoAdvance(session);
-            CancelGamblingPhase(session);
 
             if (!IsHostCaller(session))
             {
@@ -237,6 +274,9 @@ namespace QuizRush.Api.Hubs
                 await Clients.Caller.GameError("Start the game before moving to the next question.");
                 return;
             }
+
+            CancelSubmissionAutoAdvance(session);
+            CancelGamblingPhase(session);
 
             var quiz = await _quizService.GetByIdForCreatorAsync(session.QuizId, session.HostUserId);
             if (quiz == null || quiz.Questions.Count == 0)

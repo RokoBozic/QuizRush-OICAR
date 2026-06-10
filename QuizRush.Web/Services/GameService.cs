@@ -118,6 +118,12 @@ namespace QuizRush.Web.Services
             await Hub.InvokeAsync("StartGame", sessionCode).ConfigureAwait(false);
         }
 
+        public async Task EndGamblingPhase(string sessionCode)
+        {
+            await EnsureConnectedAsync();
+            await Hub.InvokeAsync("EndGamblingPhase", sessionCode).ConfigureAwait(false);
+        }
+
         public async Task NextQuestion(string sessionCode)
         {
             await EnsureConnectedAsync();

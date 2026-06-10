@@ -102,7 +102,34 @@ public class AuthService
     private static async Task<string> ReadErrorAsync(HttpResponseMessage response, string fallback)
     {
         var raw = await response.Content.ReadAsStringAsync();
-        return string.IsNullOrWhiteSpace(raw) ? fallback : raw.Trim('"');
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return fallback;
+        }
+
+        if (raw.TrimStart().StartsWith('{'))
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(raw);
+                if (document.RootElement.TryGetProperty("message", out var message))
+                {
+                    return message.GetString() ?? fallback;
+                }
+            }
+            catch
+            {
+                // Fall through to plain-text handling.
+            }
+        }
+
+        var trimmed = raw.Trim('"');
+        if (trimmed.Contains("<html", StringComparison.OrdinalIgnoreCase))
+        {
+            return fallback;
+        }
+
+        return trimmed.Length > 300 ? $"{trimmed[..300]}…" : trimmed;
     }
 
     private static bool IsTokenExpired(string token)

@@ -3,7 +3,7 @@
 <div class="card mb-3">
     <div class="card-body">
         <h5 class="card-title">Select Quiz</h5>
-        <select class="form-select" @onchange="OnChange">
+        <select class="form-select" value="@SelectedQuizIdText" @onchange="OnChange">
             <option value="">Choose a quiz...</option>
             @foreach (var quiz in Quizzes)
             {
@@ -15,7 +15,10 @@
 
 @code {
     [Parameter] public IReadOnlyList<QuizResponseViewModel> Quizzes { get; set; } = Array.Empty<QuizResponseViewModel>();
+    [Parameter] public long? SelectedQuizId { get; set; }
     [Parameter] public EventCallback<long?> SelectedQuizChanged { get; set; }
+
+    private string SelectedQuizIdText => SelectedQuizId?.ToString() ?? string.Empty;
 
     private async Task OnChange(ChangeEventArgs args)
     {

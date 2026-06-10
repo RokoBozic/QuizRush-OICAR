@@ -78,7 +78,9 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddDbContext<QuizRushDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("Default")));
+    options.UseSqlServer(
+        builder.Configuration.GetConnectionString("Default"),
+        sqlOptions => sqlOptions.EnableRetryOnFailure()));
 
 string jwtKey = builder.Configuration["Jwt:Key"] ?? string.Empty;
 if (string.IsNullOrWhiteSpace(jwtKey))
@@ -135,6 +137,36 @@ builder.Services.AddScoped<IGameSessionService, GameSessionService>();
 builder.Services.AddScoped<ScoreCalculationService>();
 
 var app = builder.Build();
+
+if (app.Environment.IsDevelopment())
+{
+    using var scope = app.Services.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<QuizRushDbContext>();
+    db.Database.Migrate();
+}
+
+// Return JSON errors to mobile/API clients instead of the HTML developer exception page.
+app.Use(async (context, next) =>
+{
+    try
+    {
+        await next();
+    }
+    catch (Exception ex)
+    {
+        if (!context.Request.Path.StartsWithSegments("/api"))
+        {
+            throw;
+        }
+
+        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        context.Response.ContentType = "application/json";
+        var message = app.Environment.IsDevelopment()
+            ? ex.GetBaseException().Message
+            : "An unexpected error occurred.";
+        await context.Response.WriteAsJsonAsync(new { message });
+    }
+});
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
