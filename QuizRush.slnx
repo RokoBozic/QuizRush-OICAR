@@ -10,5 +10,7 @@
     <Deploy Solution="Debug|*" Project="true" />
   </Project>
   <Project Path="QuizRush.Tests/QuizRush.Tests.csproj" Id="7ec04f1f-a5e3-410e-8585-bf4e76b8fcec" />
+  <Project Path="QuizRush.Web.Tests/QuizRush.Web.Tests.csproj" />
+  <Project Path="QuizRush.Mobile.Tests/QuizRush.Mobile.Tests.csproj" />
   <Project Path="QuizRush.Web/QuizRush.Web.csproj" />
 </Solution>

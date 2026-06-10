@@ -1,15 +1,18 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <RootNamespace>QuizRush.Web.Tests</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="coverlet.collector" Version="6.0.4" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.0" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.9.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
@@ -17,7 +20,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\QuizRush.Core\QuizRush.Core.csproj" />
-    <ProjectReference Include="..\QuizRush.Infrastructure\QuizRush.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\QuizRush.Web\Services\AuthService.cs" Link="Linked\AuthService.cs" />
+    <Compile Include="..\QuizRush.Web\Services\LocalStorageService.cs" Link="Linked\LocalStorageService.cs" />
   </ItemGroup>
 
   <ItemGroup>
