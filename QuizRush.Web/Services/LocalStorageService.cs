@@ -11,7 +11,7 @@ namespace QuizRush.Web.Services
             _jsRuntime = jsRuntime;
         }
 
-        public async Task<string?> GetItemAsync(string key)
+        public virtual async Task<string?> GetItemAsync(string key)
         {
             try
             {
@@ -24,7 +24,7 @@ namespace QuizRush.Web.Services
             }
         }
 
-        public async Task SetItemAsync(string key, string value)
+        public virtual async Task SetItemAsync(string key, string value)
         {
             try
             {
@@ -36,7 +36,7 @@ namespace QuizRush.Web.Services
             }
         }
 
-        public async Task RemoveItemAsync(string key)
+        public virtual async Task RemoveItemAsync(string key)
         {
             try
             {
