@@ -5,6 +5,7 @@ namespace QuizRush.Core.Hubs
         // Host calls
         Task HostGame(long quizId);
         Task StartGame(string sessionCode);
+        Task EndGamblingPhase(string sessionCode);
         Task NextQuestion(string sessionCode);
         Task EndGame(string sessionCode);
 

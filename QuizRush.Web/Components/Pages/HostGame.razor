@@ -8,6 +8,7 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime Js
 @implements IDisposable
+@using Microsoft.AspNetCore.Components
 
 <PageTitle>Host Game</PageTitle>
 
@@ -26,10 +27,12 @@ else if (!IsAuthenticated)
 }
 else
 {
-    <HostQuizSelector Quizzes="Quizzes" SelectedQuizChanged="OnSelectedQuizChanged" />
+    <HostQuizSelector Quizzes="Quizzes" SelectedQuizId="SelectedQuizId" SelectedQuizChanged="OnSelectedQuizChanged" />
 
     <div class="mb-3">
-        <button class="btn btn-primary" @onclick="HostQuiz" disabled="@(!SelectedQuizId.HasValue)">Host Quiz</button>
+        <button class="btn btn-primary" @onclick="HostQuiz" disabled="@(!SelectedQuizId.HasValue || IsHosting)">
+            @(IsHosting ? "Starting..." : "Host Quiz")
+        </button>
     </div>
 }
 
@@ -44,29 +47,49 @@ else
         <span>You have a saved host session: <strong>@StoredSessionCode</strong></span>
         <div class="d-flex gap-2">
             <button type="button" class="btn btn-sm btn-outline-primary" @onclick="ResumeStoredSession">Resume</button>
-            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="ClearStoredSession">Dismiss</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" @onclick="DismissStoredSessionAsync">Dismiss</button>
         </div>
     </div>
 }
 
 @code {
+    [SupplyParameterFromQuery]
+    public long? QuizId { get; set; }
+
     private List<QuizResponseViewModel> Quizzes { get; set; } = [];
     private long? SelectedQuizId { get; set; }
     private bool IsAuthenticated { get; set; }
     private string StatusMessage { get; set; } = string.Empty;
     private string? StoredSessionCode { get; set; }
     private bool _clientInitialized;
+    private bool IsHosting { get; set; }
 
     protected override void OnInitialized()
     {
         // Must unsubscribe in Dispose: same GameService is used when joining as a player on /join,
         // and the hub also raises GameJoined there — a stale handler would navigate to /host and show the host UI.
         GameService.OnGameJoined += OnHostSessionCreated;
+        GameService.OnGameError += OnHostGameError;
     }
 
     private void OnHostSessionCreated(string sessionCode, int totalPlayers, string hostName)
     {
-        _ = InvokeAsync(() => Navigation.NavigateTo($"/host/{sessionCode}"));
+        _ = InvokeAsync(() =>
+        {
+            IsHosting = false;
+            StatusMessage = string.Empty;
+            Navigation.NavigateTo($"/host/{sessionCode}");
+        });
+    }
+
+    private void OnHostGameError(string message)
+    {
+        _ = InvokeAsync(() =>
+        {
+            IsHosting = false;
+            StatusMessage = message;
+            StateHasChanged();
+        });
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -91,6 +114,10 @@ else
         {
             var quizzes = await Http.GetFromJsonAsync<List<QuizResponseViewModel>>("api/quiz");
             Quizzes = quizzes ?? [];
+            if (QuizId.HasValue && Quizzes.Any(q => q.Id == QuizId.Value))
+            {
+                SelectedQuizId = QuizId.Value;
+            }
         }
         catch (Exception ex)
         {
@@ -113,17 +140,20 @@ else
     {
         if (!SelectedQuizId.HasValue)
         {
+            StatusMessage = "Select a quiz before hosting.";
             return;
         }
 
         try
         {
+            IsHosting = true;
             StatusMessage = string.Empty;
             await GameService.EnsureConnectedAsync();
             await GameService.HostGame(SelectedQuizId.Value);
         }
         catch (Exception ex)
         {
+            IsHosting = false;
             StatusMessage = $"Error starting game: {ex.Message}";
         }
     }
@@ -148,8 +178,28 @@ else
         }
     }
 
-    private async Task ClearStoredSession()
+    private async Task DismissStoredSessionAsync()
     {
+        var sessionCode = StoredSessionCode?.Trim().ToUpperInvariant();
+
+        if (!string.IsNullOrWhiteSpace(sessionCode))
+        {
+            try
+            {
+                await GameService.EnsureConnectedAsync();
+                await GameService.EndGame(sessionCode);
+            }
+            catch (Exception ex)
+            {
+                // If the session is already gone, still clear the stale browser state.
+                if (!ex.GetBaseException().Message.Contains("Session not found", StringComparison.OrdinalIgnoreCase))
+                {
+                    StatusMessage = $"Could not dismiss the previous host session: {ex.GetBaseException().Message}";
+                    return;
+                }
+            }
+        }
+
         try
         {
             await Js.InvokeVoidAsync("localStorage.removeItem", "hostSessionCode");
@@ -160,10 +210,12 @@ else
         }
 
         StoredSessionCode = null;
+        StatusMessage = string.Empty;
     }
 
     public void Dispose()
     {
         GameService.OnGameJoined -= OnHostSessionCreated;
+        GameService.OnGameError -= OnHostGameError;
     }
 }

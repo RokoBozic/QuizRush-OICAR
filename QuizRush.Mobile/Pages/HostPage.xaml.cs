@@ -12,6 +12,8 @@ public partial class HostPage : ContentPage
     private List<QuizResponseViewModel> _quizzes = [];
     private string? _currentSessionCode;
     private int _playerCount;
+    private bool _endingSession;
+    private bool _isInGamblingPhase;
 
     public HostPage(AuthService authService, QuizApiService quizApiService, PlayerGameService gameService)
     {
@@ -27,6 +29,7 @@ public partial class HostPage : ContentPage
         _gameService.QuestionReady += HandleQuestionReady;
         _gameService.QuestionAnswered += HandleQuestionAnswered;
         _gameService.HostSelfAck += HandleHostNotice;
+        _gameService.GamblingPhaseStarted += HandleGamblingPhaseStarted;
         _gameService.GameEnded += HandleGameEnded;
         _gameService.GameError += HandleGameError;
     }
@@ -35,6 +38,18 @@ public partial class HostPage : ContentPage
     {
         base.OnAppearing();
         await RefreshAsync();
+    }
+
+    protected override async void OnDisappearing()
+    {
+        base.OnDisappearing();
+
+        if (_endingSession || string.IsNullOrWhiteSpace(_currentSessionCode))
+        {
+            return;
+        }
+
+        await EndActiveHostedSessionAsync(updateStatusMessage: false);
     }
 
     private async void OnHostSelectedQuizClicked(object? sender, EventArgs e)
@@ -73,6 +88,12 @@ public partial class HostPage : ContentPage
             return;
         }
 
+        if (_isInGamblingPhase)
+        {
+            await _gameService.EndGamblingPhaseAsync(_currentSessionCode);
+            return;
+        }
+
         await _gameService.NextQuestionAsync(_currentSessionCode);
     }
 
@@ -83,7 +104,7 @@ public partial class HostPage : ContentPage
             return;
         }
 
-        await _gameService.EndGameAsync(_currentSessionCode);
+        await EndActiveHostedSessionAsync(updateStatusMessage: true);
     }
 
     private async void OnEditQuizClicked(object? sender, EventArgs e)
@@ -127,7 +148,15 @@ public partial class HostPage : ContentPage
 
     private void HandleSessionChanged()
     {
-        MainThread.BeginInvokeOnMainThread(async () => await RefreshAsync());
+        MainThread.BeginInvokeOnMainThread(async () =>
+        {
+            if (!_authService.Session.IsAuthenticated && !string.IsNullOrWhiteSpace(_currentSessionCode))
+            {
+                await EndActiveHostedSessionAsync(updateStatusMessage: false);
+            }
+
+            await RefreshAsync();
+        });
     }
 
     private void HandleGameJoined(string sessionCode, int totalPlayers, string hostName)
@@ -162,10 +191,29 @@ public partial class HostPage : ContentPage
     {
         MainThread.BeginInvokeOnMainThread(() =>
         {
+            _isInGamblingPhase = false;
             SessionStateLabel.Text = $"Game live - {questionCount} question(s).";
             StartGameButton.IsVisible = false;
             NextQuestionButton.IsVisible = true;
+            NextQuestionButton.Text = "Next Question";
             EndGameButton.IsVisible = true;
+        });
+    }
+
+    private void HandleGamblingPhaseStarted(int seconds)
+    {
+        MainThread.BeginInvokeOnMainThread(() =>
+        {
+            _isInGamblingPhase = seconds > 0;
+
+            if (_isInGamblingPhase)
+            {
+                NextQuestionButton.Text = "End Gambling Phase";
+                HostAnswerCountLabel.Text = $"Gambling phase: {seconds}s remaining";
+                return;
+            }
+
+            NextQuestionButton.Text = "Next Question";
         });
     }
 
@@ -173,6 +221,8 @@ public partial class HostPage : ContentPage
     {
         MainThread.BeginInvokeOnMainThread(() =>
         {
+            _isInGamblingPhase = false;
+            NextQuestionButton.Text = "Next Question";
             HostQuestionLabel.Text = question.Text;
             HostAnswerCountLabel.Text = $"Question timer: {timeLimit}s";
         });
@@ -206,7 +256,7 @@ public partial class HostPage : ContentPage
             StartGameButton.IsVisible = true;
             NextQuestionButton.IsVisible = false;
             EndGameButton.IsVisible = false;
-            _currentSessionCode = null;
+            ClearActiveSessionUi();
         });
     }
 
@@ -216,5 +266,60 @@ public partial class HostPage : ContentPage
         {
             HostStatusLabel.Text = message;
         });
+    }
+
+    private async Task EndActiveHostedSessionAsync(bool updateStatusMessage)
+    {
+        if (_endingSession || string.IsNullOrWhiteSpace(_currentSessionCode))
+        {
+            return;
+        }
+
+        _endingSession = true;
+        var sessionCode = _currentSessionCode;
+
+        try
+        {
+            await _gameService.EndGameAsync(sessionCode);
+        }
+        catch (Exception ex)
+        {
+            if (!ex.GetBaseException().Message.Contains("Session not found", StringComparison.OrdinalIgnoreCase))
+            {
+                if (updateStatusMessage)
+                {
+                    HostStatusLabel.Text = ex.GetBaseException().Message;
+                }
+
+                return;
+            }
+        }
+        finally
+        {
+            _endingSession = false;
+        }
+
+        ClearActiveSessionUi();
+        if (updateStatusMessage)
+        {
+            HostStatusLabel.Text = "Session closed.";
+        }
+    }
+
+    private void ClearActiveSessionUi()
+    {
+        _currentSessionCode = null;
+        _playerCount = 0;
+        _isInGamblingPhase = false;
+        SessionPanel.IsVisible = false;
+        SessionCodeLabel.Text = string.Empty;
+        SessionStateLabel.Text = string.Empty;
+        PlayersLabel.Text = string.Empty;
+        HostQuestionLabel.Text = string.Empty;
+        HostAnswerCountLabel.Text = string.Empty;
+        StartGameButton.IsVisible = true;
+        NextQuestionButton.IsVisible = false;
+        NextQuestionButton.Text = "Next Question";
+        EndGameButton.IsVisible = false;
     }
 }
